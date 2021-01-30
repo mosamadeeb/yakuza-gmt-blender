@@ -40,25 +40,28 @@ class ExportGMT(Operator, ExportHelper):
             items.append((a.name, a.name, ""))
         return items
 
+    def get_file_name(self, context):
+        name = self.anm_callback(context)[0][0]
+        if "(" in name and ")" in name:
+            # used to avoid suffixes (e.g ".001")
+            return name[name.index("(")+1:name.index(")")]
+        return ""
+
+    def get_anm_name(self, context):
+        name = self.anm_callback(context)[0][0]
+        if "(" in name:
+            return name[:name.index("(")]
+        return ""
+
     anm_name: EnumProperty(
         items=anm_callback,
-        name="Animation",
-        description="The action to be exported",
-        default=None,
-        options={'ANIMATABLE'},
-        update=None,
-        get=None,
-        set=None)
+        name="Action",
+        description="The action to be exported")
 
     skeleton_name: EnumProperty(
         items=skeleton_callback,
         name="Skeleton",
-        description="The armature used for the action",
-        default=None,
-        options={'ANIMATABLE'},
-        update=None,
-        get=None,
-        set=None)
+        description="The armature used for the action")
 
     gmt_properties: EnumProperty(
         items=[('KENZAN', 'Ryu Ga Gotoku Kenzan', ""),
@@ -68,11 +71,17 @@ class ExportGMT(Operator, ExportHelper):
                ('YAKUZA_6', 'Yakuza 6, 7, Kiwami 2, Judgment', "")],
         name="Game Preset",
         description="Target game which the exported GMT will be used in",
-        default=3,
-        options={'ANIMATABLE'},
-        update=None,
-        get=None,
-        set=None)
+        default=3)
+
+    gmt_file_name: StringProperty(
+        name="GMT File Name",
+        description="Internal GMT file name",
+        maxlen=30)
+
+    gmt_anm_name: StringProperty(
+        name="GMT Animation Name",
+        description="Internal GMT animation name",
+        maxlen=30)
 
     def draw(self, context):
         layout = self.layout
@@ -83,6 +92,12 @@ class ExportGMT(Operator, ExportHelper):
         layout.prop(self, 'anm_name')
         layout.prop(self, 'skeleton_name')
         layout.prop(self, 'gmt_properties')
+        layout.prop(self, 'gmt_file_name')
+        layout.prop(self, 'gmt_anm_name')
+        
+        self.gmt_file_name = self.get_file_name(context)
+        self.gmt_anm_name = self.get_anm_name(context)
+
 
     def execute(self, context):
         arm = self.check_armature()
@@ -133,6 +148,8 @@ class GMTExporter:
         self.filepath = filepath
         # used for bone translation before exporting
         self.anm_name = export_settings.get("anm_name")
+        self.gmt_file_name = export_settings.get("gmt_anm_name")
+        self.gmt_anm_name = export_settings.get("gmt_file_name")
         self.skeleton_name = export_settings.get("skeleton_name")
         self.start_frame = export_settings.get("start_frame")  # convenience
         self.end_frame = export_settings.get("end_frame")  # convenience
@@ -160,8 +177,7 @@ class GMTExporter:
 
         header.big_endian = True
         header.version = self.gmt_properties.version
-        header.file_name = Name(self.anm_name[self.anm_name.index(
-            "(")+1:self.anm_name.index(")")])  # used to avoid suffixes (e.g ".001")
+        header.file_name = Name(self.gmt_file_name)
         header.flags = 0
 
         self.gmt_file.header = header
@@ -175,7 +191,7 @@ class GMTExporter:
         action = bpy.data.actions.get(self.anm_name)
 
         anm = Animation()
-        anm.name = Name(self.anm_name[:self.anm_name.index("(")])
+        anm.name = Name(self.gmt_anm_name)
         anm.frame_rate = 30.0
         anm.index = anm.index1 = anm.index2 = anm.index3 = 0
 
