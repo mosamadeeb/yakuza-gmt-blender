@@ -188,6 +188,7 @@ class GMTExporter:
 
             loc_curves = dict()
             rot_curves = dict()
+            pat1_curves = dict()
             for c in group.channels:
                 if c.data_path[c.data_path.rindex(".") + 1:] == "location":
                     if c.array_index == 0:
@@ -205,6 +206,10 @@ class GMTExporter:
                         rot_curves["y"] = c
                     elif c.array_index == 3:
                         rot_curves["z"] = c
+                elif c.data_path[c.data_path.rindex(".") + 1:] == "pat1_left_hand":
+                    pat1_curves["left_" + str(c.array_index)] = c
+                elif c.data_path[c.data_path.rindex(".") + 1:] == "pat1_right_hand":
+                    pat1_curves["right_" + str(c.array_index)] = c
 
             if len(loc_curves):
                 curve = Curve()
@@ -262,6 +267,30 @@ class GMTExporter:
 
                 # assume that all 4 channels have the same indices
                 curve.graph.keyframes = [int(x) for x in rot_w_co[::2]]
+                curve.graph.delimiter = -1
+
+                bone.curves.append(curve)
+
+            for pat in [p for p in pat1_curves if "0" in p]:
+                curve = Curve()
+                curve.graph = Graph()
+
+                pat1_0_co = [0] * 2 * len(pat1_curves[pat].keyframe_points)
+                pat1_curves[pat].keyframe_points.foreach_get("co", pat1_0_co)
+
+                pat1_1_co = [0] * 2 * \
+                    len(pat1_curves[pat[:-1]+"1"].keyframe_points)
+                pat1_curves[pat[:-1]+"1"].keyframe_points.foreach_get("co", pat1_1_co)
+
+                curve.curve_format = CurveFormat.PAT1_LEFT_HAND \
+                    if "left" in pat \
+                    else CurveFormat.PAT1_RIGHT_HAND
+
+                curve.values = list(map(lambda s, e: [int(s), int(e)],
+                                        pat1_0_co[1:][::2],
+                                        pat1_1_co[1:][::2]))
+
+                curve.graph.keyframes = [int(x) for x in pat1_0_co[::2]]
                 curve.graph.delimiter = -1
 
                 bone.curves.append(curve)

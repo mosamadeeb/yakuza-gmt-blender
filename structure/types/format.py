@@ -152,5 +152,13 @@ def get_curve_properties(format: CurveFormat) -> str:
         return "rotation_quaternion"
     elif 'POS' in format.name:
         return "location"
+    elif format.name == "PAT1_LEFT_HAND":
+        return "pat1_left_hand"
+    elif format.name == "PAT1_RIGHT_HAND":
+        return "pat1_right_hand"
+    elif format.name == "PAT1_UNK2":
+        return "pat1_unk2"
+    elif format.name == "PAT1_UNK3":
+        return "pat1_unk3"
     else:
         return ""
