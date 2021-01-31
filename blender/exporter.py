@@ -94,10 +94,9 @@ class ExportGMT(Operator, ExportHelper):
         layout.prop(self, 'gmt_properties')
         layout.prop(self, 'gmt_file_name')
         layout.prop(self, 'gmt_anm_name')
-        
+
         self.gmt_file_name = self.get_file_name(context)
         self.gmt_anm_name = self.get_anm_name(context)
-
 
     def execute(self, context):
         arm = self.check_armature()
@@ -202,11 +201,16 @@ class GMTExporter:
             bone.name = Name(group.name)
             bone.curves = []
 
-            loc_curves = dict()
-            rot_curves = dict()
-            pat1_curves = dict()
+            loc_len, rot_len, pat1_len = 0, 0, 0
+            loc_curves, rot_curves, pat1_curves = dict(), dict(), dict()
             for c in group.channels:
                 if c.data_path[c.data_path.rindex(".") + 1:] == "location":
+                    if loc_len == 0:
+                        loc_len = len(c.keyframe_points)
+                    elif loc_len != len(c.keyframe_points):
+                        raise GMTError(
+                            f"FCurve {c.data_path} has channels with unmatching keyframes")
+
                     if c.array_index == 0:
                         loc_curves["x"] = c
                     elif c.array_index == 1:
@@ -214,6 +218,12 @@ class GMTExporter:
                     elif c.array_index == 2:
                         loc_curves["z"] = c
                 elif c.data_path[c.data_path.rindex(".") + 1:] == "rotation_quaternion":
+                    if rot_len == 0:
+                        rot_len = len(c.keyframe_points)
+                    elif rot_len != len(c.keyframe_points):
+                        raise GMTError(
+                            f"FCurve {c.data_path} has channels with unmatching keyframes")
+
                     if c.array_index == 0:
                         rot_curves["w"] = c
                     elif c.array_index == 1:
@@ -222,12 +232,19 @@ class GMTExporter:
                         rot_curves["y"] = c
                     elif c.array_index == 3:
                         rot_curves["z"] = c
-                elif c.data_path[c.data_path.rindex(".") + 1:] == "pat1_left_hand":
-                    pat1_curves["left_" + str(c.array_index)] = c
-                elif c.data_path[c.data_path.rindex(".") + 1:] == "pat1_right_hand":
-                    pat1_curves["right_" + str(c.array_index)] = c
+                elif "pat1" in c.data_path:
+                    if pat1_len == 0:
+                        pat1_len = len(c.keyframe_points)
+                    elif pat1_len != len(c.keyframe_points):
+                        raise GMTError(
+                            f"FCurve {c.data_path} has channels with unmatching keyframes")
 
-            if len(loc_curves):
+                    if c.data_path[c.data_path.rindex(".") + 1:] == "pat1_left_hand":
+                        pat1_curves["left_" + str(c.array_index)] = c
+                    elif c.data_path[c.data_path.rindex(".") + 1:] == "pat1_right_hand":
+                        pat1_curves["right_" + str(c.array_index)] = c
+
+            if len(loc_curves) == 3:
                 curve = Curve()
                 curve.graph = Graph()
 
@@ -249,13 +266,40 @@ class GMTExporter:
 
                 curve.values = self.translate_loc(group, curve)
 
-                # assume that all 3 channels have the same indices
                 curve.graph.keyframes = [int(x) for x in loc_x_co[::2]]
                 curve.graph.delimiter = -1
 
+                # Apply constant interpolation by duplicating keyframes
+                pol = [True] * len(loc_curves["x"].keyframe_points)
+                axis_pol = pol.copy()
+                for axis in ["x", "y", "z"]:
+                    loc_curves[axis].keyframe_points.foreach_get(
+                        "interpolation", axis_pol)
+                    pol = list(map(lambda a, b: a and (b == 0),
+                                   pol, axis_pol))  # 'CONSTANT' = 0
+
+                j = 0
+                for i in range(len(pol) - 1):
+                    k = i + j
+                    if pol[i] and curve.graph.keyframes[k + 1] - curve.graph.keyframes[k] > 1:
+                        curve.values.insert(k + 1, curve.values[k])
+                        curve.graph.keyframes.insert(
+                            k + 1, curve.graph.keyframes[k + 1] - 1)
+                        j += 1
+
+                """
+                for i in range(len(loc_curves["x"].keyframe_points) - 1):
+                    if loc_curves["x"].keyframe_points[i].interpolation == 'CONSTANT' \
+                    and loc_curves["y"].keyframe_points[i].interpolation == 'CONSTANT' \
+                    and loc_curves["z"].keyframe_points[i].interpolation == 'CONSTANT' \
+                    and curve.graph.keyframes[i + 1] - curve.graph.keyframes[i] > 1:
+                        curve.values.insert(i + 1, curve.values[i])
+                        curve.graph.keyframes.insert(i + 1, curve.graph.keyframes[i + 1] - 1)
+                """
+
                 bone.curves.append(curve)
 
-            if len(rot_curves):
+            if len(rot_curves) == 4:
                 curve = Curve()
                 curve.graph = Graph()
 
@@ -281,9 +325,26 @@ class GMTExporter:
                                         rot_y_co[1:][::2],
                                         rot_z_co[1:][::2]))
 
-                # assume that all 4 channels have the same indices
                 curve.graph.keyframes = [int(x) for x in rot_w_co[::2]]
                 curve.graph.delimiter = -1
+
+                # Apply constant interpolation by duplicating keyframes
+                pol = [True] * len(rot_curves["x"].keyframe_points)
+                axis_pol = pol.copy()
+                for axis in ["x", "y", "z", "w"]:
+                    rot_curves[axis].keyframe_points.foreach_get(
+                        "interpolation", axis_pol)
+                    pol = list(map(lambda a, b: a and (b == 0),
+                                   pol, axis_pol))  # 'CONSTANT' = 0
+
+                j = 0
+                for i in range(len(pol) - 1):
+                    k = i + j
+                    if pol[i] and curve.graph.keyframes[k + 1] - curve.graph.keyframes[k] > 1:
+                        curve.values.insert(k + 1, curve.values[k])
+                        curve.graph.keyframes.insert(
+                            k + 1, curve.graph.keyframes[k + 1] - 1)
+                        j += 1
 
                 bone.curves.append(curve)
 
