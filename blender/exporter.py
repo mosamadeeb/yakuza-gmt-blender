@@ -147,8 +147,8 @@ class GMTExporter:
         self.filepath = filepath
         # used for bone translation before exporting
         self.anm_name = export_settings.get("anm_name")
-        self.gmt_file_name = export_settings.get("gmt_anm_name")
-        self.gmt_anm_name = export_settings.get("gmt_file_name")
+        self.gmt_file_name = export_settings.get("gmt_file_name")
+        self.gmt_anm_name = export_settings.get("gmt_anm_name")
         self.skeleton_name = export_settings.get("skeleton_name")
         self.start_frame = export_settings.get("start_frame")  # convenience
         self.end_frame = export_settings.get("end_frame")  # convenience
