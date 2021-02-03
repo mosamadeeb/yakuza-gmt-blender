@@ -29,6 +29,13 @@ def register():
     bpy.types.PoseBone.pat1_right_hand = bpy.props.IntVectorProperty(
         name="Right Hand", size=2, min=-1, max=25, description=desc, default=(-1, -1))
 
+    # add another set of location and rotation attributes so we can store FCurves when a driver is active
+    desc_gmt = "Stores GMT FCurves when a driver is enabled."
+    bpy.types.PoseBone.gmt_location = bpy.props.FloatVectorProperty(
+        name="GMT Location", size=3, subtype="XYZ", description=desc_gmt)
+    bpy.types.PoseBone.gmt_rotation_quaternion = bpy.props.FloatVectorProperty(
+        name="GMT Quaternion Rotation", size=4, subtype="QUATERNION", description=desc_gmt)
+
 
 def unregister():
     for c in classes:
@@ -41,3 +48,6 @@ def unregister():
 
     del bpy.types.PoseBone.pat1_left_hand
     del bpy.types.PoseBone.pat1_right_hand
+    
+    del bpy.types.PoseBone.gmt_location
+    del bpy.types.PoseBone.gmt_rotation_quaternion

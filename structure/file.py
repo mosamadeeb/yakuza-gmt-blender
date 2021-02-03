@@ -13,7 +13,7 @@ class GMTFile:
         pass
 
     header: GMTHeader
-    names: List[str]
+    names: List[Name]
 
     animations: List[Animation]
     bones: List[Bone]

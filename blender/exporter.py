@@ -1,4 +1,5 @@
 from typing import Dict
+from copy import deepcopy
 
 import bpy
 from bpy.props import EnumProperty, StringProperty
@@ -196,6 +197,8 @@ class GMTExporter:
 
         anm.bones = []
 
+        self.setup_bone_locs()
+
         for group in action.groups.values():
             bone = Bone()
             bone.name = Name(group.name)
@@ -204,7 +207,7 @@ class GMTExporter:
             loc_len, rot_len, pat1_len = 0, 0, 0
             loc_curves, rot_curves, pat1_curves = dict(), dict(), dict()
             for c in group.channels:
-                if c.data_path[c.data_path.rindex(".") + 1:] == "location":
+                if "location" in c.data_path[c.data_path.rindex(".") + 1:]:
                     if loc_len == 0:
                         loc_len = len(c.keyframe_points)
                     elif loc_len != len(c.keyframe_points):
@@ -217,7 +220,7 @@ class GMTExporter:
                         loc_curves["y"] = c
                     elif c.array_index == 2:
                         loc_curves["z"] = c
-                elif c.data_path[c.data_path.rindex(".") + 1:] == "rotation_quaternion":
+                elif "rotation_quaternion" in c.data_path[c.data_path.rindex(".") + 1:]:
                     if rot_len == 0:
                         rot_len = len(c.keyframe_points)
                     elif rot_len != len(c.keyframe_points):
@@ -264,7 +267,7 @@ class GMTExporter:
                                         loc_y_co[1:][::2],
                                         loc_z_co[1:][::2]))
 
-                curve.values = self.translate_loc(group, curve)
+                curve.values = self.translate_loc(group.name, curve)
 
                 curve.graph.keyframes = [int(x) for x in loc_x_co[::2]]
                 curve.graph.delimiter = -1
@@ -374,22 +377,50 @@ class GMTExporter:
 
             anm.bones.append(bone)
 
+            if group.name == "vector_c_n":
+                center, _ = find_bone("center_c_n", anm.bones)
+
+                if self.gmt_properties.is_dragon_engine:
+                    if not center:
+                        center = Bone()
+                        center.name = Name("center_c_n")
+
+                    if not len(center.curves):
+                        center.curves = [new_pos_curve(), new_rot_curve()]
+                else:
+                    vector_curves = deepcopy(bone.curves)
+                    for c in bone.curves:
+                        c = c.to_horizontal()
+
+                    if not center:
+                        center = Bone()
+                        center.name = Name("center_c_n")
+
+                    vertical = new_pos_curve()
+                    if len(center.position_curves()):
+                        vertical = center.position_curves()[0].to_vertical()
+
+                    center.curves = vector_curves
+                    for c in center.curves:
+                        if 'POS' in c.curve_format.name:
+                            c = add_curve(c, vertical)
+
         self.gmt_file.animations = [anm]
 
-    def translate_loc(self, group, curve):
+    def setup_bone_locs(self):
         armature = bpy.data.armatures.get(self.skeleton_name)
 
-        heads = {}
-        parents = {}
+        self.heads = {}
+        self.parents = {}
         #local_rots = {}
 
         mode = bpy.context.mode
         bpy.ops.object.mode_set(mode='EDIT')
         for b in armature.edit_bones:
             h = b["head_no_rot"].to_list() if "head_no_rot" in b else b.head
-            heads[b.name] = Vector((-h[0], h[2], h[1]))
+            self.heads[b.name] = Vector((-h[0], h[2], h[1]))
             if b.parent:
-                parents[b.name] = b.parent.name
+                self.parents[b.name] = b.parent.name
             """
             if "local_rot" in b:
                 if b.name == 'oya2_r_n' or b.name == 'oya3_r_n':
@@ -402,11 +433,12 @@ class GMTExporter:
             """
         bpy.ops.object.mode_set(mode=mode)
 
-        if group.name in parents:
-            curve.values = [(x + heads[group.name]) -
-                            heads[parents[group.name]] for x in curve.values]
+    def translate_loc(self, name, curve):
+        if name in self.parents:
+            curve.values = [(x + self.heads[name]) -
+                            self.heads[self.parents[name]] for x in curve.values]
         else:
-            curve.values = [(x + heads[group.name]) for x in curve.values]
+            curve.values = [(x + self.heads[name]) for x in curve.values]
 
         return curve.values
 

@@ -2,7 +2,7 @@ from math import tan
 from typing import Dict
 
 import bpy
-from bpy.props import EnumProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
 from mathutils import Euler, Matrix, Quaternion, Vector
@@ -37,6 +37,10 @@ class ImportGMT(Operator, ImportHelper):
             ('FIX_FROM_OLD', 'To Dragon Engine', "Old engine animation to Dragon Engine skeleton"),
         )
     """
+    center_only: BoolProperty(
+        name="Force Use center_c_n",
+        description="Use center bone only for whole translation and ignore vector bone. Breaks post-Y5 GMTs.")
+
     de_bone_fix: EnumProperty(
         items=[('NO_CHANGE', 'None', "Import/Export to same type of skeleton"),
                ('FIX_FROM_OLD', 'From Old Engine',
@@ -65,27 +69,14 @@ class ImportGMT(Operator, ImportHelper):
         get=None,
         set=None)
 
-    use_vector: EnumProperty(
-        items=[('CENTER', 'Center', "Do not use vector animation (default)"),
-               ('VECTOR', 'Vector (DE)', "Use vector animation (for DE)"),
-               ('CENTER_VECTOR', 'Center + Vector', "Use vector in center position (for Y0/YK motion)")],
-        name="Vector Translation",
-        description="Use vector_c_n instead of center_c_n to animate whole object movements (Needed for DE animations)",
-        default=None,
-        options={'ANIMATABLE'},
-        update=None,
-        get=None,
-        set=None)
-
     def draw(self, context):
         layout = self.layout
 
         layout.use_property_split = True
         layout.use_property_decorate = True  # No animation.
 
+        layout.prop(self, 'center_only')
         layout.prop(self, 'de_bone_fix')
-
-        layout.prop(self, 'use_vector')
 
         #layout.prop(self, 'frame_density')
 
@@ -319,9 +310,9 @@ class CMTImporter:
 class GMTImporter:
     def __init__(self, filepath, import_settings: Dict):
         self.filepath = filepath
+        self.center_only = import_settings.get("center_only")
         self.de_bone_fix = import_settings.get("de_bone_fix")
         self.frame_density = import_settings.get("frame_density")
-        self.use_vector = import_settings.get("use_vector")
 
     gmt_file: GMTFile
 
@@ -352,6 +343,18 @@ class GMTImporter:
 
         bpy.ops.object.mode_set(mode=mode)
         ao.hide_set(hidden)
+
+        if self.gmt_file.header.version >= 0x20002:
+            has_vector = True
+            is_dragon_engine = True
+            for name in self.gmt_file.names:
+                # TODO: This assumes that converting to Y0/K1 will add a scale bone
+                if name.string() == "scale":
+                    is_dragon_engine = False
+                    break
+        else:
+            has_vector = False
+            is_dragon_engine = False
 
         frame_count = 1
         frame_rate = 30
@@ -451,78 +454,53 @@ class GMTImporter:
                     factor = (2, 2)
             """
 
-            # now you should update g.keyframe's and add a new property to Graph
-            # then add this to the curve loop:
-            # if Graph.indices: update values with indices
-
-            # vector - center.head
-            bc = None
-            cc = None
             for b in bones.items():
                 b = list(b)
-                if self.use_vector != 'CENTER':
-                    if b[1].name.string() == 'center_c_n':
-                        bc = b[0]
-                        for c in b[1].curves:
-                            if 'POS' in c.curve_format.name:
-                                cc = c
-                        if not len(b[1].curves):
-                            b[1].curves.append(new_pos_curve())
-                        continue
-                    elif b[1].name.string() == 'vector_c_n':
-                        if bc:
-                            if not cc:
-                                for c in b[1].curves:
-                                    if 'POS' in c.curve_format.name:
-                                        x, y, z = (0.0, 1.14, 0.0)
-                                        if heads['center_c_n']:
-                                            x, z, y = heads['center_c_n']
-                                            x = -x
-                                        c.values = list(
-                                            map(lambda p: Vector((p[0] + x, p[1] + y, p[2] + z)), c.values))
-                            b[0] = bc
-                            b[1].name = Name('center_c_n')
-                            if self.use_vector == 'CENTER_VECTOR':
-                                if not cc:
-                                    continue
-                                c.neutralize_pos()
-                                cc.curve_format = CurveFormat.POS_Y
-                                b[1].curves.insert(0, cc)
-                                # for c in b[1].curves:
-                                #    if 'POS' in c.curve_format.name and cc:
-                                #        c.neutralize_pos()
-                                #        c.values = list(map(lambda x: Vec3(x[0], x[1] + cc.values[0][1], x[2]), c.values))
-                                """
-                                for c in b[1].curves:
-                                    if 'POS' in c.curve_format.name:
-                                        h = heads['center_c_n']
-                                        c.neutralize_pos()
-                                        c.values = list(map(lambda x: Vec3(x[0], x[1] + h[2], x[2]), c.values))
-                                """
-                                """
-                                for c in b[1].curves:
-                                    if 'POS' in c.curve_format.name and cc:
-                                        h = heads['center_c_n']
-                                        c.neutralize_pos()
-                                        
-                                        new_values = []
-                                        for f in c.graph.keyframes:
-                                            kf = f
-                                            if kf not in cc.graph.keyframes:
-                                                kf = [k for k in cc.graph.keyframes if k < kf][-1]
-                                            new_values.append(cc.values[cc.graph.keyframes.index(kf)])
-                                        cc.values = new_values
-
-                                        #if len(c.values) > len(cc.values):
-                                        #    cc.values.extend([cc.values[-1]] * (len(c.values) - len(cc.values)))
-                                        #cc.values = cc.values[:len(c.values)]
-                                        c.values = list(map(lambda x, y: Vec3(x[0], x[1] + y[1], x[2]), c.values, cc.values))
-                                """
-
                 group = action.groups.new(b[0].name)
                 print("Importing ActionGroup: " + group.name)
+
+                if group.name == "center_c_n":
+                    if self.center_only:
+                        # Remove vector drivers
+                        # TODO: Add a button somewhere to re-add the drivers
+                        for data_path in ("location", "rotation_quaternion"):
+                            b[0].driver_remove(data_path)
+                    elif has_vector:
+                        for d, n in zip(("location", "rotation_quaternion"), (3, 4)):
+                            for i in range(n):
+                                driver = b[0].driver_add(d, i).driver
+                                driver.type = 'SCRIPTED'
+
+                                var = driver.variables.new()
+                                var.name = "vector"
+                                var.targets[0].id = ao
+                                var.targets[0].bone_target = "vector_c_n"
+                                var.targets[0].data_path = f'pose.bones["vector_c_n"].{d}[{i}]'
+
+                                # Z-axis specific
+                                if d == "location" and i == 2:
+                                    var = driver.variables.new()
+                                    var.name = "center"
+                                    var.targets[0].id = ao
+                                    var.targets[0].bone_target = group.name
+                                    var.targets[0].data_path = f'pose.bones["{group.name}"].gmt_{d}[{i}]'
+
+                                    if is_dragon_engine:
+                                        # DE: set center's Z-axis to that of vector
+                                        driver.expression = f"vector - {heads.get(group.name, (0, 0, 1.14))[i]}"
+                                    else:
+                                        # Non DE: set center's Z-axis to that of its own FCurve added to that of vector
+                                        driver.expression = f"center + vector"
+                                else:
+                                    driver.expression = "vector"
+
+                        for c in b[1].curves:
+                            c.data_path = "gmt_" + \
+                                get_curve_properties(c.curve_format)
+
                 for c in b[1].curves:
-                    c.data_path = get_curve_properties(c.curve_format)
+                    if not c.data_path:
+                        c.data_path = get_curve_properties(c.curve_format)
                     if c.data_path == "":
                         continue
 
@@ -557,34 +535,8 @@ class GMTImporter:
                         c.values = values
                     """
 
-                    values = self.convert_values(c, group.name)
-                    if c.data_path == "location":
-                        if 'center' in b[1].name.string() and self.use_vector == 'CENTER_VECTOR':
-                            print(c.curve_format.name)
-                            if 'Y' in c.curve_format.name:
-                                # print("Y")
-                                vs = [(x[2] - heads[b[0].name][2])
-                                      for x in values]
-                                fcurve = action.fcurves.new(data_path=(
-                                    'pose.bones["%s"].' % b[0].name + c.data_path), index=2, action_group=group.name)
-                                fcurve.keyframe_points.add(
-                                    len(c.graph.keyframes))
-                                fcurve.keyframe_points.foreach_set(
-                                    "co", [x for co in zip(c.graph.keyframes, vs) for x in co])
-                                fcurve.update()
-                            elif 'VEC' in c.curve_format.name:
-                                for v in [0, 1]:
-                                    #print("VEC " + str(v))
-                                    vs = [(x[v] - heads[b[0].name][v])
-                                          for x in values]
-                                    fcurve = action.fcurves.new(data_path=(
-                                        'pose.bones["%s"].' % b[0].name + c.data_path), index=v, action_group=group.name)
-                                    fcurve.keyframe_points.add(
-                                        len(c.graph.keyframes))
-                                    fcurve.keyframe_points.foreach_set(
-                                        "co", [x for co in zip(c.graph.keyframes, vs) for x in co])
-                                    fcurve.update()
-                            continue
+                    values = self.convert_values(c)
+                    if "location" in c.data_path:
                         for v in range(len(values[0])):
                             vs = [(x[v] - heads[b[0].name][v]) for x in values]
                             if b[0].parent:
@@ -596,7 +548,7 @@ class GMTImporter:
                             fcurve.keyframe_points.foreach_set(
                                 "co", [x for co in zip(c.graph.keyframes, vs) for x in co])
                             fcurve.update()
-                    elif c.data_path == "rotation_quaternion":
+                    elif "rotation_quaternion" in c.data_path:
                         # if 'oya1' in b[0].name:
                         """
                             LOCAL ROT FIX DISABLED
@@ -644,11 +596,11 @@ class GMTImporter:
         bpy.context.scene.frame_current = 0
         bpy.context.scene.frame_end = frame_count
 
-    def convert_values(self, curve: Curve, bone_name: str):
-        if curve.data_path == "rotation_quaternion":
+    def convert_values(self, curve: Curve):
+        if "rotation_quaternion" in curve.data_path:
             curve.neutralize_rot()
             return [rot_to_blender(v) for v in curve.values]
-        elif curve.data_path == "location":
+        elif "location" in curve.data_path:
             curve.neutralize_pos()
             return [pos_to_blender(v) for v in curve.values]
         return curve.values
