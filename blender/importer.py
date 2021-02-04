@@ -460,12 +460,23 @@ class GMTImporter:
                 print("Importing ActionGroup: " + group.name)
 
                 if group.name == "center_c_n":
-                    if self.center_only:
-                        # Remove vector drivers
-                        # TODO: Add a button somewhere to re-add the drivers
-                        for data_path in ("location", "rotation_quaternion"):
-                            b[0].driver_remove(data_path)
-                    elif has_vector:
+                    # Remove vector drivers
+                    # TODO: Add a button somewhere to re-add the drivers in center_only mode
+                    for data_path in ("location", "rotation_quaternion"):
+                        b[0].driver_remove(data_path)
+
+                    if has_vector and not self.center_only:
+                        for c in b[1].curves:
+                            c.data_path = "gmt_" + \
+                                get_curve_properties(c.curve_format)
+
+                        # Move center's gmt_ curves to vector to avoid dependency cycles
+                        for v in bones.items():
+                            if v[1].name.string() == "vector_c_n":
+                                v[1].curves.extend(b[1].curves)
+                                b[1].curves.clear()
+                                break
+
                         for d, n in zip(("location", "rotation_quaternion"), (3, 4)):
                             for i in range(n):
                                 driver = b[0].driver_add(d, i).driver
@@ -479,24 +490,21 @@ class GMTImporter:
 
                                 # Z-axis specific
                                 if d == "location" and i == 2:
-                                    var = driver.variables.new()
-                                    var.name = "center"
-                                    var.targets[0].id = ao
-                                    var.targets[0].bone_target = group.name
-                                    var.targets[0].data_path = f'pose.bones["{group.name}"].gmt_{d}[{i}]'
-
+                                    c_head = heads.get(group.name, (0, 0, 1.14))[i]
                                     if is_dragon_engine:
                                         # DE: set center's Z-axis to that of vector
-                                        driver.expression = f"vector - {heads.get(group.name, (0, 0, 1.14))[i]}"
+                                        driver.expression = f"vector - {c_head}"
                                     else:
+                                        var = driver.variables.new()
+                                        var.name = "center"
+                                        var.targets[0].id = ao
+                                        var.targets[0].bone_target = "vector_c_n"
+                                        var.targets[0].data_path = f'pose.bones["vector_c_n"].gmt_{d}[{i}]'
+
                                         # Non DE: set center's Z-axis to that of its own FCurve added to that of vector
-                                        driver.expression = f"center + vector"
+                                        driver.expression = f"center + vector - {c_head}"
                                 else:
                                     driver.expression = "vector"
-
-                        for c in b[1].curves:
-                            c.data_path = "gmt_" + \
-                                get_curve_properties(c.curve_format)
 
                 for c in b[1].curves:
                     if not c.data_path:

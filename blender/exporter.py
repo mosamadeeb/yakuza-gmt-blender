@@ -200,100 +200,35 @@ class GMTExporter:
         self.setup_bone_locs()
 
         for group in action.groups.values():
-            bone = Bone()
-            bone.name = Name(group.name)
-            bone.curves = []
+            if group.name != "vector_c_n":
+                anm.bones.append(self.make_bone(group.name, group.channels))
+            else:
+                center, c_index = find_bone("center_c_n", anm.bones)
 
-            loc_len, rot_len, pat1_len = 0, 0, 0
-            loc_curves, rot_curves, pat1_curves = dict(), dict(), dict()
-            for c in group.channels:
-                if "location" in c.data_path[c.data_path.rindex(".") + 1:]:
-                    if loc_len == 0:
-                        loc_len = len(c.keyframe_points)
-                    elif loc_len != len(c.keyframe_points):
-                        raise GMTError(
-                            f"FCurve {c.data_path} has channels with unmatching keyframes")
+                if not len(center.curves):
+                    center_channels = [
+                        c for c in group.channels if "gmt_" in c.data_path]
 
-                    if c.array_index == 0:
-                        loc_curves["x"] = c
-                    elif c.array_index == 1:
-                        loc_curves["y"] = c
-                    elif c.array_index == 2:
-                        loc_curves["z"] = c
-                elif "rotation_quaternion" in c.data_path[c.data_path.rindex(".") + 1:]:
-                    if rot_len == 0:
-                        rot_len = len(c.keyframe_points)
-                    elif rot_len != len(c.keyframe_points):
-                        raise GMTError(
-                            f"FCurve {c.data_path} has channels with unmatching keyframes")
+                    # Use vector head (0) because we already added center head once
+                    center = self.make_bone(group.name, center_channels)
+                    center.name = Name("center_c_n")
 
-                    if c.array_index == 0:
-                        rot_curves["w"] = c
-                    elif c.array_index == 1:
-                        rot_curves["x"] = c
-                    elif c.array_index == 2:
-                        rot_curves["y"] = c
-                    elif c.array_index == 3:
-                        rot_curves["z"] = c
-                elif "pat1" in c.data_path:
-                    if pat1_len == 0:
-                        pat1_len = len(c.keyframe_points)
-                    elif pat1_len != len(c.keyframe_points):
-                        raise GMTError(
-                            f"FCurve {c.data_path} has channels with unmatching keyframes")
+                    if c_index != -1:
+                        anm.bones[c_index] = center
+                    else:
+                        anm.bones.insert(0, center)
 
-                    if c.data_path[c.data_path.rindex(".") + 1:] == "pat1_left_hand":
-                        pat1_curves["left_" + str(c.array_index)] = c
-                    elif c.data_path[c.data_path.rindex(".") + 1:] == "pat1_right_hand":
-                        pat1_curves["right_" + str(c.array_index)] = c
-
-            if len(loc_curves) == 3:
-                bone.curves.append(self.make_curve(
-                    loc_curves,
-                    axes=["x", "y", "z"],
-                    curve_format=CurveFormat.POS_VEC3,
-                    group_name=group.name))
-
-            if len(rot_curves) == 4:
-                format = CurveFormat.ROT_QUAT_SCALED \
-                    if self.gmt_properties.version > 0x10001 \
-                    else CurveFormat.ROT_QUAT_HALF_FLOAT
-                bone.curves.append(self.make_curve(
-                    rot_curves,
-                    axes=["w", "x", "y", "z"],
-                    curve_format=format,
-                    group_name=group.name))
-
-            for pat in [p for p in pat1_curves if "0" in p]:
-                format = CurveFormat.PAT1_LEFT_HAND \
-                    if "left" in pat \
-                    else CurveFormat.PAT1_RIGHT_HAND
-                bone.curves.append(self.make_curve(
-                    pat1_curves,
-                    axes=[pat, pat[:-1]+"1"],
-                    curve_format=format,
-                    group_name=group.name))
-
-            anm.bones.append(bone)
-
-            if group.name == "vector_c_n":
-                center, _ = find_bone("center_c_n", anm.bones)
+                vector = self.make_bone(
+                    group.name, [c for c in group.channels if "gmt_" not in c.data_path])
+                anm.bones.append(vector)
 
                 if self.gmt_properties.is_dragon_engine:
-                    if not center:
-                        center = Bone()
-                        center.name = Name("center_c_n")
-
                     if not len(center.curves):
                         center.curves = [new_pos_curve(), new_rot_curve()]
                 else:
-                    vector_curves = deepcopy(bone.curves)
-                    for c in bone.curves:
+                    vector_curves = deepcopy(vector.curves)
+                    for c in vector.curves:
                         c = c.to_horizontal()
-
-                    if not center:
-                        center = Bone()
-                        center.name = Name("center_c_n")
 
                     vertical = new_pos_curve()
                     if len(center.position_curves()):
@@ -304,7 +239,92 @@ class GMTExporter:
                         if 'POS' in c.curve_format.name:
                             c = add_curve(c, vertical)
 
+                    # TODO: Move this to the converter once it's implemented
+                    # Add scale bone to mark this gmt as non DE
+                    scale = Bone()
+                    scale.name = Name("scale")
+                    scale.curves = [new_pos_curve(), new_rot_curve()]
+                    anm.bones.insert(0, scale)
+
         self.gmt_file.animations = [anm]
+
+    def make_bone(self, bone_name, channels) -> Bone:
+        bone = Bone()
+        bone.name = Name(bone_name)
+        bone.curves = []
+
+        loc_len, rot_len, pat1_len = 0, 0, 0
+        loc_curves, rot_curves, pat1_curves = dict(), dict(), dict()
+
+        for c in channels:
+            if "location" in c.data_path[c.data_path.rindex(".") + 1:]:
+                if loc_len == 0:
+                    loc_len = len(c.keyframe_points)
+                elif loc_len != len(c.keyframe_points):
+                    raise GMTError(
+                        f"FCurve {c.data_path} has channels with unmatching keyframes")
+
+                if c.array_index == 0:
+                    loc_curves["x"] = c
+                elif c.array_index == 1:
+                    loc_curves["y"] = c
+                elif c.array_index == 2:
+                    loc_curves["z"] = c
+            elif "rotation_quaternion" in c.data_path[c.data_path.rindex(".") + 1:]:
+                if rot_len == 0:
+                    rot_len = len(c.keyframe_points)
+                elif rot_len != len(c.keyframe_points):
+                    raise GMTError(
+                        f"FCurve {c.data_path} has channels with unmatching keyframes")
+
+                if c.array_index == 0:
+                    rot_curves["w"] = c
+                elif c.array_index == 1:
+                    rot_curves["x"] = c
+                elif c.array_index == 2:
+                    rot_curves["y"] = c
+                elif c.array_index == 3:
+                    rot_curves["z"] = c
+            elif "pat1" in c.data_path:
+                if pat1_len == 0:
+                    pat1_len = len(c.keyframe_points)
+                elif pat1_len != len(c.keyframe_points):
+                    raise GMTError(
+                        f"FCurve {c.data_path} has channels with unmatching keyframes")
+
+                if c.data_path[c.data_path.rindex(".") + 1:] == "pat1_left_hand":
+                    pat1_curves["left_" + str(c.array_index)] = c
+                elif c.data_path[c.data_path.rindex(".") + 1:] == "pat1_right_hand":
+                    pat1_curves["right_" + str(c.array_index)] = c
+
+        if len(loc_curves) == 3:
+            bone.curves.append(self.make_curve(
+                loc_curves,
+                axes=["x", "y", "z"],
+                curve_format=CurveFormat.POS_VEC3,
+                group_name=bone_name))
+
+        if len(rot_curves) == 4:
+            format = CurveFormat.ROT_QUAT_SCALED \
+                if self.gmt_properties.version > 0x10001 \
+                else CurveFormat.ROT_QUAT_HALF_FLOAT
+            bone.curves.append(self.make_curve(
+                rot_curves,
+                axes=["w", "x", "y", "z"],
+                curve_format=format,
+                group_name=bone_name))
+
+        for pat in [p for p in pat1_curves if "0" in p]:
+            format = CurveFormat.PAT1_LEFT_HAND \
+                if "left" in pat \
+                else CurveFormat.PAT1_RIGHT_HAND
+            bone.curves.append(self.make_curve(
+                pat1_curves,
+                axes=[pat, pat[:-1]+"1"],
+                curve_format=format,
+                group_name=bone_name))
+
+        return bone
 
     def make_curve(self, fcurves, axes, curve_format, group_name) -> Curve:
         curve = Curve()
