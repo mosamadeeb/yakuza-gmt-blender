@@ -248,132 +248,31 @@ class GMTExporter:
                         pat1_curves["right_" + str(c.array_index)] = c
 
             if len(loc_curves) == 3:
-                curve = Curve()
-                curve.graph = Graph()
-
-                loc_x_co = [0] * 2 * len(loc_curves["x"].keyframe_points)
-                loc_curves["x"].keyframe_points.foreach_get("co", loc_x_co)
-
-                loc_y_co = [0] * 2 * len(loc_curves["y"].keyframe_points)
-                loc_curves["y"].keyframe_points.foreach_get("co", loc_y_co)
-
-                loc_z_co = [0] * 2 * len(loc_curves["z"].keyframe_points)
-                loc_curves["z"].keyframe_points.foreach_get("co", loc_z_co)
-
-                curve.curve_format = CurveFormat.POS_VEC3
-
-                curve.values = list(map(lambda x, y, z: Vector((-x, z, y)),
-                                        loc_x_co[1:][::2],
-                                        loc_y_co[1:][::2],
-                                        loc_z_co[1:][::2]))
-
-                curve.values = self.translate_loc(group.name, curve)
-
-                curve.graph.keyframes = [int(x) for x in loc_x_co[::2]]
-                curve.graph.delimiter = -1
-
-                # Apply constant interpolation by duplicating keyframes
-                pol = [True] * len(loc_curves["x"].keyframe_points)
-                axis_pol = pol.copy()
-                for axis in ["x", "y", "z"]:
-                    loc_curves[axis].keyframe_points.foreach_get(
-                        "interpolation", axis_pol)
-                    pol = list(map(lambda a, b: a and (b == 0),
-                                   pol, axis_pol))  # 'CONSTANT' = 0
-
-                j = 0
-                for i in range(len(pol) - 1):
-                    k = i + j
-                    if pol[i] and curve.graph.keyframes[k + 1] - curve.graph.keyframes[k] > 1:
-                        curve.values.insert(k + 1, curve.values[k])
-                        curve.graph.keyframes.insert(
-                            k + 1, curve.graph.keyframes[k + 1] - 1)
-                        j += 1
-
-                """
-                for i in range(len(loc_curves["x"].keyframe_points) - 1):
-                    if loc_curves["x"].keyframe_points[i].interpolation == 'CONSTANT' \
-                    and loc_curves["y"].keyframe_points[i].interpolation == 'CONSTANT' \
-                    and loc_curves["z"].keyframe_points[i].interpolation == 'CONSTANT' \
-                    and curve.graph.keyframes[i + 1] - curve.graph.keyframes[i] > 1:
-                        curve.values.insert(i + 1, curve.values[i])
-                        curve.graph.keyframes.insert(i + 1, curve.graph.keyframes[i + 1] - 1)
-                """
-
-                bone.curves.append(curve)
+                bone.curves.append(self.make_curve(
+                    loc_curves,
+                    axes=["x", "y", "z"],
+                    curve_format=CurveFormat.POS_VEC3,
+                    group_name=group.name))
 
             if len(rot_curves) == 4:
-                curve = Curve()
-                curve.graph = Graph()
-
-                rot_w_co = [0] * 2 * len(rot_curves["w"].keyframe_points)
-                rot_curves["w"].keyframe_points.foreach_get("co", rot_w_co)
-
-                rot_x_co = [0] * 2 * len(rot_curves["x"].keyframe_points)
-                rot_curves["x"].keyframe_points.foreach_get("co", rot_x_co)
-
-                rot_y_co = [0] * 2 * len(rot_curves["y"].keyframe_points)
-                rot_curves["y"].keyframe_points.foreach_get("co", rot_y_co)
-
-                rot_z_co = [0] * 2 * len(rot_curves["z"].keyframe_points)
-                rot_curves["z"].keyframe_points.foreach_get("co", rot_z_co)
-
-                curve.curve_format = CurveFormat.ROT_QUAT_SCALED \
+                format = CurveFormat.ROT_QUAT_SCALED \
                     if self.gmt_properties.version > 0x10001 \
                     else CurveFormat.ROT_QUAT_HALF_FLOAT
-
-                curve.values = list(map(lambda w, x, y, z: [-x, z, y, w],
-                                        rot_w_co[1:][::2],
-                                        rot_x_co[1:][::2],
-                                        rot_y_co[1:][::2],
-                                        rot_z_co[1:][::2]))
-
-                curve.graph.keyframes = [int(x) for x in rot_w_co[::2]]
-                curve.graph.delimiter = -1
-
-                # Apply constant interpolation by duplicating keyframes
-                pol = [True] * len(rot_curves["x"].keyframe_points)
-                axis_pol = pol.copy()
-                for axis in ["x", "y", "z", "w"]:
-                    rot_curves[axis].keyframe_points.foreach_get(
-                        "interpolation", axis_pol)
-                    pol = list(map(lambda a, b: a and (b == 0),
-                                   pol, axis_pol))  # 'CONSTANT' = 0
-
-                j = 0
-                for i in range(len(pol) - 1):
-                    k = i + j
-                    if pol[i] and curve.graph.keyframes[k + 1] - curve.graph.keyframes[k] > 1:
-                        curve.values.insert(k + 1, curve.values[k])
-                        curve.graph.keyframes.insert(
-                            k + 1, curve.graph.keyframes[k + 1] - 1)
-                        j += 1
-
-                bone.curves.append(curve)
+                bone.curves.append(self.make_curve(
+                    rot_curves,
+                    axes=["w", "x", "y", "z"],
+                    curve_format=format,
+                    group_name=group.name))
 
             for pat in [p for p in pat1_curves if "0" in p]:
-                curve = Curve()
-                curve.graph = Graph()
-
-                pat1_0_co = [0] * 2 * len(pat1_curves[pat].keyframe_points)
-                pat1_curves[pat].keyframe_points.foreach_get("co", pat1_0_co)
-
-                pat1_1_co = [0] * 2 * \
-                    len(pat1_curves[pat[:-1]+"1"].keyframe_points)
-                pat1_curves[pat[:-1]+"1"].keyframe_points.foreach_get("co", pat1_1_co)
-
-                curve.curve_format = CurveFormat.PAT1_LEFT_HAND \
+                format = CurveFormat.PAT1_LEFT_HAND \
                     if "left" in pat \
                     else CurveFormat.PAT1_RIGHT_HAND
-
-                curve.values = list(map(lambda s, e: [int(s), int(e)],
-                                        pat1_0_co[1:][::2],
-                                        pat1_1_co[1:][::2]))
-
-                curve.graph.keyframes = [int(x) for x in pat1_0_co[::2]]
-                curve.graph.delimiter = -1
-
-                bone.curves.append(curve)
+                bone.curves.append(self.make_curve(
+                    pat1_curves,
+                    axes=[pat, pat[:-1]+"1"],
+                    curve_format=format,
+                    group_name=group.name))
 
             anm.bones.append(bone)
 
@@ -406,6 +305,67 @@ class GMTExporter:
                             c = add_curve(c, vertical)
 
         self.gmt_file.animations = [anm]
+
+    def make_curve(self, fcurves, axes, curve_format, group_name) -> Curve:
+        curve = Curve()
+        curve.graph = Graph()
+
+        axes_co = []
+        for axis in axes:
+            axis_co = [0] * 2 * len(fcurves[axis].keyframe_points)
+            fcurves[axis].keyframe_points.foreach_get("co", axis_co)
+            axes_co.append(axis_co)
+
+        curve.curve_format = curve_format
+
+        interpolate = True
+        if len(axes_co) == 3:
+            # Position vector
+            curve.values = list(map(
+                lambda x, y, z: Vector((-x, z, y)),
+                axes_co[0][1:][::2],
+                axes_co[1][1:][::2],
+                axes_co[2][1:][::2]))
+            curve.values = self.translate_loc(group_name, curve)
+        elif len(axes_co) == 4:
+            # Rotation quaternion
+            curve.values = list(map(
+                lambda w, x, y, z: [-x, z, y, w],
+                axes_co[0][1:][::2],
+                axes_co[1][1:][::2],
+                axes_co[2][1:][::2],
+                axes_co[3][1:][::2]))
+        elif len(axes_co) == 2:
+            # Pat1
+            curve.values = list(map(
+                lambda s, e: [int(s), int(e)],
+                axes_co[0][1:][::2],
+                axes_co[1][1:][::2]))
+            interpolate = False
+
+        curve.graph.keyframes = [int(x) for x in axes_co[0][::2]]
+        curve.graph.delimiter = -1
+
+        if interpolate:
+            # Apply constant interpolation by duplicating keyframes
+            pol = [True] * len(fcurves[axes[0]].keyframe_points)
+            axis_pol = pol.copy()
+            for axis in axes:
+                fcurves[axis].keyframe_points.foreach_get(
+                    "interpolation", axis_pol)
+                pol = list(map(lambda a, b: a and (b == 0),
+                               pol, axis_pol))  # 'CONSTANT' = 0
+
+            j = 0
+            for i in range(len(pol) - 1):
+                k = i + j
+                if pol[i] and curve.graph.keyframes[k + 1] - curve.graph.keyframes[k] > 1:
+                    curve.values.insert(k + 1, curve.values[k])
+                    curve.graph.keyframes.insert(
+                        k + 1, curve.graph.keyframes[k + 1] - 1)
+                    j += 1
+
+        return curve
 
     def setup_bone_locs(self):
         armature = bpy.data.armatures.get(self.skeleton_name)
