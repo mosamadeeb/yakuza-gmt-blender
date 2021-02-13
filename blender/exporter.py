@@ -14,20 +14,13 @@ from yakuza_gmt.write import write_file
 
 
 class ExportGMT(Operator, ExportHelper):
-    """Loads a GMT file into blender"""
+    """Exports an animation to the GMT format"""
     bl_idname = "export_scene.gmt"
     bl_label = "Export Yakuza GMT"
 
     filter_glob: StringProperty(default="*.gmt", options={"HIDDEN"})
 
     filename_ext = '.gmt'
-
-    # files: CollectionProperty(
-    #    name="File Path",
-    #    type=bpy.types.OperatorFileListElement,
-    # )
-    # Only allow importing one file at a time
-    #file: StringProperty(name="File Path", subtype="FILE_PATH")
 
     def anm_callback(self, context):
         items = []
@@ -41,23 +34,18 @@ class ExportGMT(Operator, ExportHelper):
             items.append((a.name, a.name, ""))
         return items
 
-    def get_file_name(self, context):
-        name = self.anm_callback(context)[0][0]
+    def anm_update(self, context):
+        name = self.anm_name
         if "(" in name and ")" in name:
             # used to avoid suffixes (e.g ".001")
-            return name[name.index("(")+1:name.index(")")]
-        return ""
-
-    def get_anm_name(self, context):
-        name = self.anm_callback(context)[0][0]
-        if "(" in name:
-            return name[:name.index("(")]
-        return ""
+            self.gmt_file_name = name[name.index("(")+1:name.index(")")]
+            self.gmt_anm_name = name[:name.index("(")]
 
     anm_name: EnumProperty(
         items=anm_callback,
         name="Action",
-        description="The action to be exported")
+        description="The action to be exported",
+        update=anm_update)
 
     skeleton_name: EnumProperty(
         items=skeleton_callback,
@@ -96,8 +84,9 @@ class ExportGMT(Operator, ExportHelper):
         layout.prop(self, 'gmt_file_name')
         layout.prop(self, 'gmt_anm_name')
 
-        self.gmt_file_name = self.get_file_name(context)
-        self.gmt_anm_name = self.get_anm_name(context)
+        # update file and anm name if both are empty
+        if self.gmt_file_name == self.gmt_anm_name == "":
+            self.anm_update(context)
 
     def execute(self, context):
         arm = self.check_armature()
