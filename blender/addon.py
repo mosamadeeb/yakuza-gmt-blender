@@ -2,13 +2,10 @@ import bpy
 from bpy.props import PointerProperty
 from yakuza_gmt.blender.exporter import ExportGMT, menu_func_export
 from yakuza_gmt.blender.importer import ImportGMT, menu_func_import
-from yakuza_gmt.blender.tools import GMTTools, AddHandPattern, menu_func_tools
 
 classes = (
     ImportGMT,
     ExportGMT,
-    GMTTools,
-    AddHandPattern
 )
 
 
@@ -19,7 +16,6 @@ def register():
     # add to the export / import menu
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
-    # bpy.types.DOPESHEET_MT_context_menu.append(menu_func_tools)
 
     # add new pattern attributes
     desc = """Sets interpolation states for hand pattern animations.
@@ -40,11 +36,13 @@ def register():
 def unregister():
     for c in classes:
         bpy.utils.unregister_class(c)
+    # for f in extension_panel_unregister_functors:
+    #    f()
+    # extension_panel_unregister_functors.clear()
 
     # remove from the export / import menu
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
-    # bpy.types.DOPESHEET_HT_header.remove(menu_func_tools)
 
     del bpy.types.PoseBone.pat1_left_hand
     del bpy.types.PoseBone.pat1_right_hand
