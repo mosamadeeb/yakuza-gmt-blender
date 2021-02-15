@@ -6,7 +6,7 @@ from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
 from mathutils import Euler, Matrix, Quaternion, Vector
-from yakuza_gmt.blender.coordinate_converter import (pos_to_blender,
+from yakuza_gmt.blender.coordinate_converter import (pattern_to_blender, pos_to_blender,
                                                      rot_to_blender)
 from yakuza_gmt.blender.error import GMTError
 from yakuza_gmt.read import read_file
@@ -576,20 +576,17 @@ class GMTImporter:
                                 "co", [x for co in zip(c.graph.keyframes, vs) for x in co])
                             fcurve.update()
                     elif "pat1" in c.data_path and hasattr(b[0], c.data_path):
-                        #setattr(bpy.types.PoseBone, c.data_path, bpy.props.IntVectorProperty(name="Pat1 Unk", size=2, default=(-1, -1)))
-                        for v in range(len(values[0])):
-                            vs = [x[v] for x in values]
-                            fcurve = action.fcurves.new(data_path=(
-                                'pose.bones["%s"].' % b[0].name + c.data_path), index=v, action_group=group.name)
-                            fcurve.keyframe_points.add(len(c.graph.keyframes))
-                            fcurve.keyframe_points.foreach_set(
-                                "co", [x for co in zip(c.graph.keyframes, vs) for x in co])
+                        fcurve = action.fcurves.new(data_path=(
+                            'pose.bones["%s"].' % b[0].name + c.data_path), action_group=group.name)
+                        fcurve.keyframe_points.add(len(c.graph.keyframes))
+                        fcurve.keyframe_points.foreach_set(
+                            "co", [x for co in zip(c.graph.keyframes, values) for x in co])
 
-                            # Pattern keyframes should have no interpolation
-                            for kf in fcurve.keyframe_points:
-                                kf.interpolation = 'CONSTANT'
+                        # Pattern keyframes should have no interpolation
+                        for kf in fcurve.keyframe_points:
+                            kf.interpolation = 'CONSTANT'
 
-                            fcurve.update()
+                        fcurve.update()
                     elif hasattr(b[0], c.data_path):
                         #setattr(bpy.types.PoseBone, c.data_path, bpy.props.IntProperty(name="Pat2 Unk"))
                         fcurve = action.fcurves.new(data_path=(
@@ -611,6 +608,8 @@ class GMTImporter:
         elif "location" in curve.data_path:
             curve.neutralize_pos()
             return [pos_to_blender(v) for v in curve.values]
+        elif "pat1" in curve.data_path:
+            return pattern_to_blender(curve.values)
         return curve.values
 
 

@@ -1,11 +1,12 @@
-from typing import Dict
 from copy import deepcopy
+from typing import Dict
 
 import bpy
 from bpy.props import EnumProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper
 from mathutils import Vector
+from yakuza_gmt.blender.coordinate_converter import pattern_from_blender
 from yakuza_gmt.blender.error import GMTError
 from yakuza_gmt.read_cmt import *
 from yakuza_gmt.structure.file import *
@@ -242,7 +243,7 @@ class GMTExporter:
         bone.name = Name(bone_name)
         bone.curves = []
 
-        loc_len, rot_len, pat1_len = 0, 0, 0
+        loc_len, rot_len = 0, 0
         loc_curves, rot_curves, pat1_curves = dict(), dict(), dict()
 
         for c in channels:
@@ -275,12 +276,6 @@ class GMTExporter:
                 elif c.array_index == 3:
                     rot_curves["z"] = c
             elif "pat1" in c.data_path:
-                if pat1_len == 0:
-                    pat1_len = len(c.keyframe_points)
-                elif pat1_len != len(c.keyframe_points):
-                    raise GMTError(
-                        f"FCurve {c.data_path} has channels with unmatching keyframes")
-
                 if c.data_path[c.data_path.rindex(".") + 1:] == "pat1_left_hand":
                     pat1_curves["left_" + str(c.array_index)] = c
                 elif c.data_path[c.data_path.rindex(".") + 1:] == "pat1_right_hand":
@@ -303,13 +298,13 @@ class GMTExporter:
                 curve_format=format,
                 group_name=bone_name))
 
-        for pat in [p for p in pat1_curves if "0" in p]:
+        for pat in pat1_curves:
             format = CurveFormat.PAT1_LEFT_HAND \
                 if "left" in pat \
                 else CurveFormat.PAT1_RIGHT_HAND
             bone.curves.append(self.make_curve(
                 pat1_curves,
-                axes=[pat, pat[:-1]+"1"],
+                axes=[pat],
                 curve_format=format,
                 group_name=bone_name))
 
@@ -326,6 +321,9 @@ class GMTExporter:
             axes_co.append(axis_co)
 
         curve.curve_format = curve_format
+
+        curve.graph.keyframes = [int(x) for x in axes_co[0][::2]]
+        curve.graph.delimiter = -1
 
         interpolate = True
         if len(axes_co) == 3:
@@ -344,16 +342,18 @@ class GMTExporter:
                 axes_co[1][1:][::2],
                 axes_co[2][1:][::2],
                 axes_co[3][1:][::2]))
-        elif len(axes_co) == 2:
+        elif len(axes_co) == 1:
             # Pat1
+            axes_co = axes_co[0][1:][::2]
+            if not self.gmt_properties.is_dragon_engine:
+                # prevent pattern numbers larger than old engine max to be exported
+                axes_co = self.correct_pattern(axes_co)
+            axes_co = pattern_from_blender(axes_co)
             curve.values = list(map(
                 lambda s, e: [int(s), int(e)],
-                axes_co[0][1:][::2],
-                axes_co[1][1:][::2]))
+                axes_co[0],
+                axes_co[1]))
             interpolate = False
-
-        curve.graph.keyframes = [int(x) for x in axes_co[0][::2]]
-        curve.graph.delimiter = -1
 
         if interpolate:
             # Apply constant interpolation by duplicating keyframes
@@ -410,6 +410,9 @@ class GMTExporter:
             curve.values = [(x + self.heads[name]) for x in curve.values]
 
         return curve.values
+
+    def correct_pattern(self, pattern):
+        return list(map(lambda x: 0 if x > 17 else x, pattern))
 
 
 def menu_func_export(self, context):

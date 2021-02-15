@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import List, Tuple
 
 from mathutils import Vector, Quaternion, Matrix
 
@@ -24,6 +24,10 @@ def rot_to_blender(rot):
     return [rot[3], -rot[0], rot[2], rot[1]]
 
 
+def pattern_to_blender(pattern: List[List[int]]) -> List[int]:
+    return list(map(lambda x: x[0], pattern))
+
+
 def pos_from_blender(pos: Vector) -> Vector:
     return Vector((-pos[0], pos[2], pos[1]))
 
@@ -34,6 +38,10 @@ def pos_from_blender_unscaled(pos: Vector) -> Vector:
 
 def rot_from_blender(rot: Quaternion) -> Quaternion:
     return Quaternion((-rot[1], rot[3], rot[2], rot[0]))
+
+
+def pattern_from_blender(pattern: List[int]) -> List[List[int]]:
+    return [pattern, pattern[1:] + [pattern[-1]]]
 
 
 def transform_from_blender(pos: Vector, rot: Quaternion, scale: Vector) -> Tuple[Vector, Quaternion, Vector]:
