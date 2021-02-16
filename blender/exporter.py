@@ -25,7 +25,17 @@ class ExportGMT(Operator, ExportHelper):
 
     def anm_callback(self, context):
         items = []
-        for a in bpy.data.actions:
+
+        anm_name = ""
+        ao = bpy.context.active_object
+        if ao and ao.animation_data:
+            # add the selected action first so that it's the default value
+            selected_anm = ao.animation_data.action
+            if selected_anm:
+                anm_name = selected_anm.name
+                items = [(anm_name, anm_name, "")]
+
+        for a in [act for act in bpy.data.actions if act.name != anm_name]:
             items.append((a.name, a.name, ""))
         return items
 
