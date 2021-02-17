@@ -1,14 +1,62 @@
 import bpy
 from bpy.app.handlers import persistent
+from bpy.props import StringProperty
+from bpy.types import AddonPreferences
 from yakuza_gmt.blender.exporter import ExportGMT, menu_func_export
 from yakuza_gmt.blender.importer import ImportGMT, menu_func_import
 from yakuza_gmt.blender.pattern import PatternPanel, PatternIndicesPanel
+
+class GMTPatternPreferences(AddonPreferences):
+    bl_idname = "yakuza_gmt"
+    
+    # TODO: Add descriptions for these
+    
+    old_par: StringProperty(
+        name="Y3, 4, 5 Pattern.par",
+        subtype='FILE_PATH',
+    )
+    
+    new_par: StringProperty(
+        name="Y0, K1 Pattern.par",
+        subtype='FILE_PATH',
+    )
+    
+    dragon_par: StringProperty(
+        name="Y6, 7, K2 motion.par",
+        subtype='FILE_PATH',
+    )
+    
+    old_bone_par: StringProperty(
+        name="Y3, 4, 5 bone.par",
+        subtype='FILE_PATH',
+    )
+    
+    new_bone_par: StringProperty(
+        name="Y0, K1 bone.par",
+        subtype='FILE_PATH',
+    )
+    
+    dragon_bone_par: StringProperty(
+        name="Y6, 7, K2 chara.par",
+        subtype='FILE_PATH',
+    )
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="Choose the path for Pattern.par for each engine version. Required for pattern previewing")
+        layout.prop(self, "old_par")
+        layout.prop(self, "new_par")
+        layout.prop(self, "dragon_par")
+        layout.prop(self, "old_bone_par")
+        layout.prop(self, "new_bone_par")
+        layout.prop(self, "dragon_bone_par")
 
 classes = (
     ImportGMT,
     ExportGMT,
     PatternPanel,
     PatternIndicesPanel,
+    GMTPatternPreferences,
 )
 
 

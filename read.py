@@ -304,12 +304,14 @@ def read_animations(gmt: BinaryReader, file: GMTFile) -> List[Animation]:
     return anm_list
 
 
-def read_file(path: str) -> GMTFile:
-    file = GMTFile()
+def read_gmt_file(path: str) -> GMTFile:
+    with open(realpath(path), "rb") as f:
+        return read_gmt_file_from_data(f.read())
 
-    f = open(realpath(path), "rb")
-    gmt = BinaryReader(f.read())
-    f.close()
+
+def read_gmt_file_from_data(data: bytearray) -> GMTFile:
+    file = GMTFile()
+    gmt = BinaryReader(data)
 
     if gmt.read_str(4) != "GSGT":
         print("Invalid magic!")

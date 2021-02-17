@@ -1,6 +1,7 @@
 from typing import List, Tuple
 
-from mathutils import Vector, Quaternion, Matrix
+from mathutils import Quaternion, Vector
+from yakuza_gmt.structure.curve import Curve
 
 
 def transform_position_gmd_to_blender(pos: Vector) -> Vector:
@@ -16,7 +17,6 @@ def transform_to_blender(pos: Vector, rot: Quaternion, scale: Vector) -> Tuple[V
 
 
 def pos_to_blender(pos):
-    # return [-pos[0] / float(64), pos[2] / float(64), pos[1] / float(64)]
     return [-pos[0], pos[2], pos[1]]
 
 
@@ -44,28 +44,13 @@ def pattern_from_blender(pattern: List[int]) -> List[List[int]]:
     return [pattern, pattern[1:] + [pattern[-1]]]
 
 
-def transform_from_blender(pos: Vector, rot: Quaternion, scale: Vector) -> Tuple[Vector, Quaternion, Vector]:
-    # The transformation is symmetrical
-    return transform_gmd_to_blender(pos, rot, scale)
-
-
-def transform_matrix_gmd_to_blender(matrix: Matrix) -> Matrix:
-    pos, rot, scale = matrix.decompose()
-    pos, rot, scale = transform_gmd_to_blender(pos, rot, scale)
-    return transform_to_matrix(pos, rot, scale)
-
-
-def transform_matrix_blender_to_gmd(matrix: Matrix) -> Matrix:
-    pos, rot, scale = matrix.decompose()
-    pos, rot, scale = transform_blender_to_gmd(pos, rot, scale)
-    return transform_to_matrix(pos, rot, scale)
-
-
-def transform_to_matrix(pos: Vector, rot: Quaternion, scale: Vector) -> Matrix:
-    scale_matrix = Matrix.Diagonal(scale)
-    scale_matrix.resize_4x4()
-    rot_matrix = rot.to_matrix()
-    rot_matrix.resize_4x4()
-    pos_matrix = Matrix.Translation(pos.xyz)
-    pos_matrix.resize_4x4()
-    return pos_matrix @ rot_matrix @ scale_matrix
+def convert_gmt_to_blender(curve: Curve):
+    if "rotation_quaternion" in curve.data_path:
+        curve.neutralize_rot()
+        return [rot_to_blender(v) for v in curve.values]
+    elif "location" in curve.data_path:
+        curve.neutralize_pos()
+        return [pos_to_blender(v) for v in curve.values]
+    elif "pat1" in curve.data_path:
+        return pattern_to_blender(curve.values)
+    return curve.values
