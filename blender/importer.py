@@ -9,7 +9,7 @@ from mathutils import Euler, Quaternion, Vector
 from yakuza_gmt.blender.bone_props import get_edit_bones_props
 from yakuza_gmt.blender.coordinate_converter import convert_gmt_to_blender
 from yakuza_gmt.blender.error import GMTError
-from yakuza_gmt.blender.pattern import make_pattern_action, set_pattern_drivers
+from yakuza_gmt.blender.pattern import make_pattern_action
 from yakuza_gmt.read import read_gmt_file
 from yakuza_gmt.read_cmt import *
 from yakuza_gmt.structure.file import *
@@ -522,6 +522,10 @@ class GMTImporter:
                         c.values = values
                     """
 
+        pattern_action = bpy.data.actions.get("GMT_Pattern")
+        if not pattern_action:
+            pattern_action = make_pattern_action()
+
         bpy.context.scene.render.fps = frame_rate
         bpy.context.scene.frame_start = 0
         bpy.context.scene.frame_current = 0
@@ -571,11 +575,6 @@ def import_curve(c: Curve, b: Tuple[PoseBone, Bone], action: Action, group_name:
                 "co", [x for co in zip(c.graph.keyframes, vs) for x in co])
             fcurve.update()
     elif "pat1" in c.data_path and hasattr(b[0], c.data_path):
-        pattern_action = bpy.data.actions.get("GMT_Pattern")
-        if not pattern_action:
-            pattern_action = make_pattern_action()
-        set_pattern_drivers(c, pattern_action, version)
-
         fcurve = action.fcurves.new(data_path=(
             'pose.bones["%s"].' % b[0].name + c.data_path), action_group=group_name)
         fcurve.keyframe_points.add(len(c.graph.keyframes))

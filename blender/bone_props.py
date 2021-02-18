@@ -23,7 +23,7 @@ def get_gmd_bones_props(gmd_bones) -> Dict[str, Tuple[Vector, str]]:
     heads = {}
     for b in gmd_bones:
         parent_name = b.parent_recursive[0].name if len(
-            b.parents_recursive) else ""
+            b.parent_recursive) else ""
         heads[b.name] = (pos_to_blender(Vector(b.global_pos[:3])), parent_name)
 
     if not len(heads):

@@ -72,8 +72,8 @@ FILE_NAME_NEW = [
     '17_chop'
 ]
 
-for i in FILE_NAME_NEW:
-    i = 'Hand_parts_' + i + '.gmt'
+for i in range(len(FILE_NAME_NEW)):
+    FILE_NAME_NEW[i] = 'Hand_parts_' + FILE_NAME_NEW[i] + '.gmt'
 
 FILE_NAME_OLD = FILE_NAME_NEW[:14]
 
@@ -106,8 +106,8 @@ FILE_NAME_DE = [
     '25_clutch'
 ]
 
-for i in FILE_NAME_DE:
-    i = 'm_handptn_anim_' + i + '.gmt'
+for i in range(len(FILE_NAME_DE)):
+    FILE_NAME_DE[i] = 'm_handptn_anim_' + FILE_NAME_DE[i] + '.gmt'
 
 FILE_NAME_LISTS = [FILE_NAME_OLD, FILE_NAME_NEW, FILE_NAME_DE]
 
@@ -127,6 +127,8 @@ HAND_BONES_DE = HAND_BONES_NEW[2:]
 
 for b in ['naka', 'hito', 'koyu', 'kusu']:
     for d in ['r', 'l']:
-        HAND_BONES_DE.append(f'{b}0_{d}')
+        HAND_BONES_DE.append(f'{b}0_{d}_n')
 
 HAND_BONES_LISTS = [HAND_BONES_OLD, HAND_BONES_NEW, HAND_BONES_DE]
+
+VERSION_STR = ["_old", "_new", "_de"]

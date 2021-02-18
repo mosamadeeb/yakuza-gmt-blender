@@ -4,52 +4,64 @@ from bpy.props import StringProperty
 from bpy.types import AddonPreferences
 from yakuza_gmt.blender.exporter import ExportGMT, menu_func_export
 from yakuza_gmt.blender.importer import ImportGMT, menu_func_import
-from yakuza_gmt.blender.pattern import PatternPanel, PatternIndicesPanel
+from yakuza_gmt.blender.pattern import (PatternIndicesPanel, PatternPanel,
+                                        apply_patterns)
+
 
 class GMTPatternPreferences(AddonPreferences):
     bl_idname = "yakuza_gmt"
-    
+
     # TODO: Add descriptions for these
-    
+
     old_par: StringProperty(
         name="Y3, 4, 5 Pattern.par",
+        description="""Path to Old Engine Pattern.par. Can be found in <game_directory>/data/motion/ folder.
+Yakuza 5 par contains more patterns than Yakuza 3/4 par""",
         subtype='FILE_PATH',
     )
-    
+
     new_par: StringProperty(
         name="Y0, K1 Pattern.par",
+        description="Path to Yakuza 0/Kiwami 1 Pattern.par. Can be found in <game_directory>/data/motion/ folder",
         subtype='FILE_PATH',
     )
-    
+
     dragon_par: StringProperty(
         name="Y6, 7, K2 motion.par",
+        description="""Path to Dragon Engine motion.par. Can be any par archive containing DE patterns.
+Yakuza 7 par contains more patterns than Yakuza 6/Kiwami 2/Judgment par""",
         subtype='FILE_PATH',
     )
-    
+
     old_bone_par: StringProperty(
         name="Y3, 4, 5 bone.par",
+        description="Path to Old Engine bone.par. Can be found in <game_directory>/data/chara_common/ folder",
         subtype='FILE_PATH',
     )
-    
+
     new_bone_par: StringProperty(
         name="Y0, K1 bone.par",
+        description="Path to Yakuza 0/Kiwami 1 bone.par. Can be found in <game_directory>/data/chara_common/ folder",
         subtype='FILE_PATH',
     )
-    
+
     dragon_bone_par: StringProperty(
         name="Y6, 7, K2 chara.par",
+        description="Path to Dragon Engine chara.par. Can be any par archive containing DE bone GMDs",
         subtype='FILE_PATH',
     )
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="Choose the path for Pattern.par for each engine version. Required for pattern previewing")
+        layout.label(
+            text="Choose the path for Pattern.par for each engine version. Required for pattern previewing")
         layout.prop(self, "old_par")
         layout.prop(self, "new_par")
         layout.prop(self, "dragon_par")
         layout.prop(self, "old_bone_par")
         layout.prop(self, "new_bone_par")
         layout.prop(self, "dragon_bone_par")
+
 
 classes = (
     ImportGMT,
@@ -103,6 +115,7 @@ The animation will be interpolated from the current keyframe's state to the next
 
     # add a handler to change pattern curves interpolation to constant on each frame update
     bpy.app.handlers.frame_change_pre.append(change_interpolation)
+    bpy.app.handlers.frame_change_post.append(apply_patterns)
 
 
 def unregister():
