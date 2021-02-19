@@ -84,14 +84,22 @@ def add_curve(curve1, curve2):
         for f in curve1.graph.keyframes:
             kf = f
             if kf not in curve2.graph.keyframes:
-                kf = [k for k in curve2.graph.keyframes if k < kf][-1]
+                kf = [k for k in curve2.graph.keyframes if k < f]
+                if not kf:
+                    kf = [k for k in curve2.graph.keyframes if k >= f][0]
+                else:
+                    kf = kf[-1]
             new_values.append(curve2.values[curve2.graph.keyframes.index(kf)])
         curve2.values = new_values
     else:
         for f in curve2.graph.keyframes:
             kf = f
             if kf not in curve1.graph.keyframes:
-                kf = [k for k in curve1.graph.keyframes if k < kf][-1]
+                kf = [k for k in curve1.graph.keyframes if k < f]
+                if not kf:
+                    kf = [k for k in curve1.graph.keyframes if k >= f][0]
+                else:
+                    kf = kf[-1]
             new_values.append(curve1.values[curve1.graph.keyframes.index(kf)])
         curve1.values = new_values
         curve1.graph = curve2.graph
