@@ -17,11 +17,11 @@ def transform_to_blender(pos: Vector, rot: Quaternion, scale: Vector) -> Tuple[V
 
 
 def pos_to_blender(pos):
-    return [-pos[0], pos[2], pos[1]]
+    return Vector([-pos[0], pos[2], pos[1]])
 
 
 def rot_to_blender(rot):
-    return [rot[3], -rot[0], rot[2], rot[1]]
+    return Quaternion([rot[3], -rot[0], rot[2], rot[1]])
 
 
 def pattern_to_blender(pattern: List[List[int]]) -> List[int]:

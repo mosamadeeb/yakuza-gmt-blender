@@ -1,12 +1,12 @@
 from math import tan
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import Action, Operator, PoseBone
 from bpy_extras.io_utils import ImportHelper
-from mathutils import Euler, Quaternion, Vector
-from yakuza_gmt.blender.bone_props import get_edit_bones_props
+from mathutils import Euler, Matrix, Quaternion, Vector
+from yakuza_gmt.blender.bone_props import GMTBoneProps, get_edit_bones_props
 from yakuza_gmt.blender.coordinate_converter import convert_gmt_to_blender
 from yakuza_gmt.blender.error import GMTError
 from yakuza_gmt.blender.pattern import make_pattern_action
@@ -193,7 +193,8 @@ class CMTImporter:
 
             for i in range(3):
                 loc = [x[i] for x in locations]
-                location = action.fcurves.new(data_path=('location'), index=i, action_group=group.name)
+                location = action.fcurves.new(data_path=(
+                    'location'), index=i, action_group=group.name)
                 location.keyframe_points.add(anm.frame_count)
                 location.keyframe_points.foreach_set(
                     "co", [x for co in zip(frames, loc) for x in co])
@@ -207,7 +208,8 @@ class CMTImporter:
                     "co", [x for co in zip(frames, rot) for x in co])
                 rotation.update()
 
-            angle = action.fcurves.new(data_path=('data.lens'), action_group=group.name)
+            angle = action.fcurves.new(data_path=(
+                'data.lens'), action_group=group.name)
             angle.keyframe_points.add(anm.frame_count)
             angle.keyframe_points.foreach_set(
                 "co", [x for co in zip(frames, foc_lengths) for x in co])
@@ -422,7 +424,7 @@ class GMTImporter:
                             c.values = values
                     bones[kosi[0][0]] = bone_pair[1]
 
-            heads = get_edit_bones_props()
+            bone_props = get_edit_bones_props()
 
             # Frame density
             """
@@ -474,8 +476,8 @@ class GMTImporter:
                                 var.targets[0].data_path = f'pose.bones["vector_c_n"].{d}[{i}]'
 
                                 # Z-axis specific
-                                if d == "location" and i == 2:
-                                    c_head = heads.get(group.name, (0, 0, 1.14))[0][i]
+                                if d == "location" and i == 1:
+                                    c_head = bone_props.get(group.name).head[2]
                                     if version == 2:
                                         # DE: set center's Z-axis to that of vector
                                         driver.expression = f"vector - {c_head}"
@@ -492,7 +494,7 @@ class GMTImporter:
                                     driver.expression = "vector"
 
                 for c in b[1].curves:
-                    import_curve(c, b, action, group.name, version, heads)
+                    import_curve(c, b, action, group.name, bone_props)
                     # Frame density
                     """
                     if self.frame_density != 'HIGHEST':
@@ -534,22 +536,17 @@ class GMTImporter:
         bpy.context.scene.frame_end = frame_count
 
 
-def import_curve(c: Curve, b: Tuple[PoseBone, Bone], action: Action, group_name: str, version, heads: Dict[str, Tuple[Vector, str]]):
+def import_curve(c: Curve, b: Tuple[PoseBone, Bone], action: Action, group_name: str, bone_props: Dict[str, GMTBoneProps]):
     if not c.data_path:
         c.data_path = get_curve_properties(c.curve_format)
     if c.data_path == "":
         return
     values = convert_gmt_to_blender(c)
     if "location" in c.data_path:
-        head, parent = heads[b[0].name]
-        parent_head = heads.get(parent)
-        if parent_head:
-            parent_head = parent_head[0]
-        else:
-            parent_head = Vector()
+        values = transform_location(bone_props, b[0].name, values)
 
         for v in range(len(values[0])):
-            vs = [(x[v] - head[v]) + parent_head[v] for x in values]
+            vs = [x[v] for x in values]
 
             fcurve = action.fcurves.new(data_path=(
                 'pose.bones["%s"].' % b[0].name + c.data_path), index=v, action_group=group_name)
@@ -566,7 +563,7 @@ def import_curve(c: Curve, b: Tuple[PoseBone, Bone], action: Action, group_name:
         # if 'oya2' in b[0].name or 'oya3' in b[0].name:
         #    values = list(map(lambda x: local_rots[b[0].name] @ Quaternion(x), values))
 
-        #values = list(map(lambda x: rotate_quat(Quaternion(x), local_rots[b[0].name]), values))
+        values = transform_rotation(bone_props, b[0].name, values)
 
         for v in range(len(values[0])):
             vs = [x[v] for x in values]
@@ -596,6 +593,48 @@ def import_curve(c: Curve, b: Tuple[PoseBone, Bone], action: Action, group_name:
         fcurve.keyframe_points.foreach_set(
             "co", [x for co in zip(c.graph.keyframes, values) for x in co])
         fcurve.update()
+
+
+def transform_location(bone_props: Dict[str, GMTBoneProps], bone_name: str, values: List[Vector]):
+    prop = bone_props[bone_name]
+    head = prop.head
+    parent_head = bone_props.get(prop.parent_name)
+    if parent_head:
+        parent_head = parent_head.head
+    else:
+        parent_head = Vector()
+
+    loc = prop.loc
+    rot = prop.rot
+
+    values = list(map(lambda x: (
+        Matrix.Translation(loc).inverted()
+        @ rot.to_matrix().to_4x4().inverted()
+        @ Matrix.Translation(x - head + parent_head)
+        @ rot.to_matrix().to_4x4()
+        @ Matrix.Translation(loc)
+    ).to_translation(), values))
+
+    return values
+
+
+def transform_rotation(bone_props: Dict[str, GMTBoneProps], bone_name: str, values: List[Quaternion]):
+    prop = bone_props[bone_name]
+
+    loc = prop.loc
+    rot = prop.rot
+    rot_local = prop.rot_local
+
+    values = list(map(lambda x: (
+        Matrix.Translation(loc).inverted()
+        @ rot.to_matrix().to_4x4().inverted()
+        @ rot_local.to_matrix().to_4x4().inverted()
+        @ x.to_matrix().to_4x4()
+        @ rot.to_matrix().to_4x4()
+        @ Matrix.Translation(loc)
+    ).to_quaternion(), values))
+
+    return values
 
 
 def rotate_quat(quat1: Quaternion, quat2: Quaternion) -> Quaternion:
