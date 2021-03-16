@@ -167,6 +167,8 @@ class CMTImporter:
                 name=self.cmt_file.name)
             action = camera.animation_data.action
 
+            group = action.groups.new("camera")
+
             anm.anm_data = self.convert_cam_to_blender(anm.anm_data)
 
             locations, rotations, foc_lengths = [], [], []
@@ -191,7 +193,7 @@ class CMTImporter:
 
             for i in range(3):
                 loc = [x[i] for x in locations]
-                location = action.fcurves.new(data_path=('location'), index=i)
+                location = action.fcurves.new(data_path=('location'), index=i, action_group=group.name)
                 location.keyframe_points.add(anm.frame_count)
                 location.keyframe_points.foreach_set(
                     "co", [x for co in zip(frames, loc) for x in co])
@@ -199,13 +201,13 @@ class CMTImporter:
             for i in range(4):
                 rot = [x[i] for x in rotations]
                 rotation = action.fcurves.new(
-                    data_path=('rotation_quaternion'), index=i)
+                    data_path=('rotation_quaternion'), index=i, action_group=group.name)
                 rotation.keyframe_points.add(anm.frame_count)
                 rotation.keyframe_points.foreach_set(
                     "co", [x for co in zip(frames, rot) for x in co])
                 rotation.update()
 
-            angle = action.fcurves.new(data_path=('data.lens'))
+            angle = action.fcurves.new(data_path=('data.lens'), action_group=group.name)
             angle.keyframe_points.add(anm.frame_count)
             angle.keyframe_points.foreach_set(
                 "co", [x for co in zip(frames, foc_lengths) for x in co])
