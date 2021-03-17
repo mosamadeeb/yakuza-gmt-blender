@@ -3,15 +3,18 @@ from typing import Dict
 
 import bpy
 from bpy.props import EnumProperty, StringProperty
-from bpy.types import Operator
+from bpy.types import Armature, FCurve, Operator
 from bpy_extras.io_utils import ExportHelper
-from mathutils import Vector
+from mathutils import Matrix, Quaternion, Vector
 
 from ..read_cmt import *
 from ..structure.file import *
 from ..structure.version import GMTProperties
 from ..write import write_file
-from .coordinate_converter import pattern_from_blender
+from . import bone_props
+from .bone_props import GMTBoneProps, get_bones_props
+from .coordinate_converter import (pattern_from_blender, pos_from_blender,
+                                   rot_from_blender)
 from .error import GMTError
 
 
@@ -163,6 +166,9 @@ class GMTExporter:
 
         self.gmt_file = GMTFile()
 
+    armature: Armature
+    bone_props: Dict[str, GMTBoneProps]
+
     def export(self):
         print(f"Exporting animation: {self.anm_name}")
 
@@ -184,10 +190,10 @@ class GMTExporter:
         self.gmt_file.header = header
 
     def get_anm(self):
+        self.armature = bpy.data.armatures.get(self.skeleton_name)
 
-        ao = bpy.context.active_object
-        if not ao.animation_data:
-            raise GMTError("No animation data found")
+        if not self.armature:
+            raise GMTError("Armature not found")
 
         action = bpy.data.actions.get(self.anm_name)
 
@@ -249,7 +255,7 @@ class GMTExporter:
 
         self.gmt_file.animations = [anm]
 
-    def make_bone(self, bone_name, channels) -> Bone:
+    def make_bone(self, bone_name: str, channels: List[FCurve]) -> Bone:
         bone = Bone()
         bone.name = Name(bone_name)
         bone.curves = []
@@ -321,7 +327,7 @@ class GMTExporter:
 
         return bone
 
-    def make_curve(self, fcurves, axes, curve_format, group_name) -> Curve:
+    def make_curve(self, fcurves: List[FCurve], axes: List[str], curve_format: CurveFormat, group_name: str) -> Curve:
         curve = Curve()
         curve.graph = Graph()
 
@@ -340,19 +346,20 @@ class GMTExporter:
         if len(axes_co) == 3:
             # Position vector
             curve.values = list(map(
-                lambda x, y, z: Vector((-x, z, y)),
+                lambda x, y, z: Vector((x, y, z)),
                 axes_co[0][1:][::2],
                 axes_co[1][1:][::2],
                 axes_co[2][1:][::2]))
-            curve.values = self.translate_loc(group_name, curve)
+            curve.values = self.transform_location(group_name, curve.values)
         elif len(axes_co) == 4:
             # Rotation quaternion
             curve.values = list(map(
-                lambda w, x, y, z: [-x, z, y, w],
+                lambda w, x, y, z: Quaternion((w, x, y, z)),
                 axes_co[0][1:][::2],
                 axes_co[1][1:][::2],
                 axes_co[2][1:][::2],
                 axes_co[3][1:][::2]))
+            curve.values = self.transform_rotation(group_name, curve.values)
         elif len(axes_co) == 1:
             # Pat1
             axes_co = axes_co[0][1:][::2]
@@ -388,42 +395,56 @@ class GMTExporter:
         return curve
 
     def setup_bone_locs(self):
-        armature = bpy.data.armatures.get(self.skeleton_name)
-
-        self.heads = {}
-        self.parents = {}
-        #local_rots = {}
-
         mode = bpy.context.mode
         bpy.ops.object.mode_set(mode='EDIT')
-        for b in armature.edit_bones:
-            h = b["head_no_rot"].to_list() if "head_no_rot" in b else b.head
-            self.heads[b.name] = Vector((-h[0], h[2], h[1]))
-            if b.parent:
-                self.parents[b.name] = b.parent.name
-            """
-            if "local_rot" in b:
-                if b.name == 'oya2_r_n' or b.name == 'oya3_r_n':
-                    local_rots[b.name] = local_rots['oya1_r_n'].inverted()
-                if b.name == 'oya2_l_n' or b.name == 'oya3_l_n':
-                    local_rots[b.name] = local_rots['oya1_l_n'].inverted()
-                local_rots[b.name] = Quaternion(b["local_rot"].to_list())
-            else:
-                local_rots[b.name] = Quaternion()
-            """
+        
+        self.bone_props = get_bones_props(self.armature.edit_bones)
+        
         bpy.ops.object.mode_set(mode=mode)
 
-    def translate_loc(self, name, curve):
-        if name in self.parents:
-            curve.values = [(x + self.heads[name]) -
-                            self.heads[self.parents[name]] for x in curve.values]
-        else:
-            curve.values = [(x + self.heads[name]) for x in curve.values]
-
-        return curve.values
 
     def correct_pattern(self, pattern):
         return list(map(lambda x: 0 if x > 17 else x, pattern))
+
+
+    def transform_location(self, bone_name: str, values: List[Vector]):
+        prop = self.bone_props[bone_name]
+        head = prop.head
+        parent_head = self.bone_props.get(prop.parent_name)
+        if parent_head:
+            parent_head = parent_head.head
+        else:
+            parent_head = Vector()
+
+        loc = prop.loc
+        rot = prop.rot
+        
+        values = list(map(lambda x: pos_from_blender((
+            rot.to_matrix().to_4x4()
+            @ Matrix.Translation(x)
+        ).to_translation() + head - parent_head), values))
+        
+        print(values[0])
+        print()
+
+        return values
+
+
+    def transform_rotation(self, bone_name: str, values: List[Quaternion]):
+        prop = self.bone_props[bone_name]
+
+        loc = prop.loc
+        rot = prop.rot
+        rot_local = prop.rot_local
+
+        values = list(map(lambda x: rot_from_blender((
+            rot_local.to_matrix().to_4x4()
+            @ rot.to_matrix().to_4x4()
+            @ x.to_matrix().to_4x4()
+            @ rot.to_matrix().to_4x4().inverted()
+        ).to_quaternion()), values))
+
+        return values
 
 
 def menu_func_export(self, context):

@@ -36,8 +36,8 @@ def pos_from_blender_unscaled(pos: Vector) -> Vector:
     return Vector((-pos[0], pos[2] + 1.1, pos[1]))
 
 
-def rot_from_blender(rot: Quaternion) -> Quaternion:
-    return Quaternion((-rot[1], rot[3], rot[2], rot[0]))
+def rot_from_blender(rot: Quaternion) -> Tuple[float]:
+    return (-rot[1], rot[3], rot[2], rot[0])
 
 
 def pattern_from_blender(pattern: List[int]) -> List[List[int]]:
