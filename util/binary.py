@@ -1,4 +1,3 @@
-
 import struct
 from itertools import chain
 

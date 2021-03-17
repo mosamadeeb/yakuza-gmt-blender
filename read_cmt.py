@@ -1,7 +1,7 @@
 from os.path import basename
 from typing import List
 
-from yakuza_gmt.util.binary import BinaryReader
+from .util.binary import BinaryReader
 
 
 class CMTData:

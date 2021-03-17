@@ -6,14 +6,15 @@ from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import Action, Operator, PoseBone
 from bpy_extras.io_utils import ImportHelper
 from mathutils import Euler, Matrix, Quaternion, Vector
-from yakuza_gmt.blender.bone_props import GMTBoneProps, get_edit_bones_props
-from yakuza_gmt.blender.coordinate_converter import convert_gmt_to_blender
-from yakuza_gmt.blender.error import GMTError
-from yakuza_gmt.blender.pattern import make_pattern_action
-from yakuza_gmt.read import read_gmt_file
-from yakuza_gmt.read_cmt import *
-from yakuza_gmt.structure.file import *
-from yakuza_gmt.structure.types.format import get_curve_properties
+
+from ..read import read_gmt_file
+from ..read_cmt import *
+from ..structure.file import *
+from ..structure.types.format import get_curve_properties
+from .bone_props import GMTBoneProps, get_edit_bones_props
+from .coordinate_converter import convert_gmt_to_blender
+from .error import GMTError
+from .pattern import make_pattern_action
 
 
 class ImportGMT(Operator, ImportHelper):

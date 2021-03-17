@@ -4,15 +4,15 @@ from math import sqrt
 from os.path import realpath
 from typing import Any, List
 
-from yakuza_gmt.structure.animation import Animation
-from yakuza_gmt.structure.bone import Bone
-from yakuza_gmt.structure.curve import Curve
-from yakuza_gmt.structure.file import GMTFile
-from yakuza_gmt.structure.graph import Graph
-from yakuza_gmt.structure.header import GMTHeader
-from yakuza_gmt.structure.name import Name
-from yakuza_gmt.structure.types.format import CurveFormat, parse_format
-from yakuza_gmt.util.binary import BinaryReader
+from .structure.animation import Animation
+from .structure.bone import Bone
+from .structure.curve import Curve
+from .structure.file import GMTFile
+from .structure.graph import Graph
+from .structure.header import GMTHeader
+from .structure.name import Name
+from .structure.types.format import CurveFormat, parse_format
+from .util.binary import BinaryReader
 
 
 def read_header(gmt: BinaryReader) -> GMTHeader:

@@ -1,4 +1,4 @@
-from yakuza_gmt.structure.name import Name
+from .name import Name
 
 
 class GMTHeader:

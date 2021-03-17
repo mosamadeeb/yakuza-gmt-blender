@@ -2,10 +2,10 @@ import bpy
 from bpy.app.handlers import persistent
 from bpy.props import StringProperty
 from bpy.types import AddonPreferences
-from yakuza_gmt.blender.exporter import ExportGMT, menu_func_export
-from yakuza_gmt.blender.importer import ImportGMT, menu_func_import
-from yakuza_gmt.blender.pattern import (PatternIndicesPanel, PatternPanel,
-                                        apply_patterns)
+
+from .exporter import ExportGMT, menu_func_export
+from .importer import ImportGMT, menu_func_import
+from .pattern import PatternIndicesPanel, PatternPanel, apply_patterns
 
 
 class GMTPatternPreferences(AddonPreferences):

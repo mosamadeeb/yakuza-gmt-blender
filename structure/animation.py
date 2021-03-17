@@ -1,9 +1,9 @@
 from typing import List
 
-from yakuza_gmt.structure.bone import Bone
-from yakuza_gmt.structure.curve import Curve
-from yakuza_gmt.structure.graph import Graph, zero_graph
-from yakuza_gmt.structure.name import Name
+from .bone import Bone
+from .curve import Curve
+from .graph import Graph, zero_graph
+from .name import Name
 
 
 class Animation:

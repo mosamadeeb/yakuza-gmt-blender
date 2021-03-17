@@ -1,9 +1,7 @@
 from typing import List
 
-from yakuza_gmt.structure.curve import Curve
-from yakuza_gmt.structure.graph import Graph
-from yakuza_gmt.structure.name import Name
-from yakuza_gmt.structure.types.format import CurveFormat
+from .curve import Curve
+from .name import Name
 
 
 class Bone:

@@ -1,7 +1,7 @@
 from typing import List
 from os.path import realpath
 
-from yakuza_gmt.util.binary import BinaryReader
+from .util.binary import BinaryReader
 
 
 class GMDBone:

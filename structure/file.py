@@ -1,11 +1,11 @@
 from typing import List
 
-from yakuza_gmt.structure.animation import *
-from yakuza_gmt.structure.bone import *
-from yakuza_gmt.structure.curve import *
-from yakuza_gmt.structure.graph import *
-from yakuza_gmt.structure.header import *
-from yakuza_gmt.structure.name import *
+from .animation import *
+from .bone import *
+from .curve import *
+from .graph import *
+from .header import *
+from .name import *
 
 
 class GMTFile:

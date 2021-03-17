@@ -6,12 +6,13 @@ from bpy.props import EnumProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper
 from mathutils import Vector
-from yakuza_gmt.blender.coordinate_converter import pattern_from_blender
-from yakuza_gmt.blender.error import GMTError
-from yakuza_gmt.read_cmt import *
-from yakuza_gmt.structure.file import *
-from yakuza_gmt.structure.version import GMTProperties
-from yakuza_gmt.write import write_file
+
+from ..read_cmt import *
+from ..structure.file import *
+from ..structure.version import GMTProperties
+from ..write import write_file
+from .coordinate_converter import pattern_from_blender
+from .error import GMTError
 
 
 class ExportGMT(Operator, ExportHelper):

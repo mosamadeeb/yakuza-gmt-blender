@@ -1,4 +1,5 @@
 import importlib.util
+
 blender_loader = importlib.util.find_spec('bpy')
 
 # Include the bl_info at the top level always
@@ -15,4 +16,4 @@ bl_info = {
 }
 
 if blender_loader:
-    from yakuza_gmt.blender.addon import *
+    from .blender.addon import *

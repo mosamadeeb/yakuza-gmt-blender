@@ -3,17 +3,17 @@ from typing import Dict, List, Tuple
 import bpy
 from bpy.types import Action, ActionGroup, FCurve, Panel, Preferences
 from mathutils import Quaternion, Vector
-from yakuza_gmt.blender.bone_props import (get_edit_bones_props,
-                                           get_gmd_bones_props)
-from yakuza_gmt.blender.coordinate_converter import convert_gmt_to_blender
-from yakuza_gmt.blender.error import GMTError
-from yakuza_gmt.blender.pattern_lists import *
-from yakuza_gmt.read import read_gmt_file_from_data
-from yakuza_gmt.read_gmd import read_gmd_bones_from_data
-from yakuza_gmt.structure.bone import find_bone
-from yakuza_gmt.structure.curve import Curve, new_pos_curve, new_rot_curve
-from yakuza_gmt.structure.types.format import get_curve_properties
-from yakuza_gmt.yakuza_par_py.src import *
+
+from ..read import read_gmt_file_from_data
+from ..read_gmd import read_gmd_bones_from_data
+from ..structure.bone import find_bone
+from ..structure.curve import Curve, new_pos_curve, new_rot_curve
+from ..structure.types.format import get_curve_properties
+from ..yakuza_par_py.src import *
+from .bone_props import get_edit_bones_props, get_gmd_bones_props
+from .coordinate_converter import convert_gmt_to_blender
+from .error import GMTError
+from .pattern_lists import *
 
 
 class PatternBasePanel:

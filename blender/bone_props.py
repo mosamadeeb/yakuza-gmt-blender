@@ -2,7 +2,8 @@ from typing import Dict, Tuple
 
 import bpy
 from mathutils import Quaternion, Vector
-from yakuza_gmt.blender.coordinate_converter import pos_to_blender, rot_to_blender
+
+from .coordinate_converter import pos_to_blender, rot_to_blender
 
 
 class GMTBoneProps:

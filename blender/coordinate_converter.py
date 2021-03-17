@@ -1,7 +1,7 @@
 from typing import List, Tuple
 
 from mathutils import Quaternion, Vector
-from yakuza_gmt.structure.curve import Curve
+from ..structure.curve import Curve
 
 
 def transform_position_gmd_to_blender(pos: Vector) -> Vector:

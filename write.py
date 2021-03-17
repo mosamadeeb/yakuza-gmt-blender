@@ -1,14 +1,8 @@
 from typing import List, Tuple
 
-from yakuza_gmt.structure.animation import Animation
-from yakuza_gmt.structure.bone import Bone
-from yakuza_gmt.structure.curve import Curve
-from yakuza_gmt.structure.file import GMTFile
-from yakuza_gmt.structure.graph import Graph
-from yakuza_gmt.structure.header import GMTHeader
-from yakuza_gmt.structure.name import Name
-from yakuza_gmt.structure.types.format import CurveFormat, pack_curve_format
-from yakuza_gmt.util.binary import BinaryReader
+from .structure.file import GMTFile
+from .structure.types.format import CurveFormat, pack_curve_format
+from .util.binary import BinaryReader
 
 
 def write_anm_maps(gmt: GMTFile) -> bytearray:

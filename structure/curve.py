@@ -1,8 +1,8 @@
 from typing import Any, List
 from copy import deepcopy
 
-from yakuza_gmt.structure.graph import *
-from yakuza_gmt.structure.types.format import CurveFormat
+from .graph import *
+from .types.format import CurveFormat
 
 
 class Curve:
