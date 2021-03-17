@@ -12,9 +12,11 @@ from ..read_cmt import *
 from ..structure.file import *
 from ..structure.types.format import get_curve_properties
 from .bone_props import GMTBoneProps, get_edit_bones_props
-from .coordinate_converter import convert_gmt_to_blender
+from .coordinate_converter import (convert_gmt_to_blender, transform_location,
+                                   transform_rotation)
 from .error import GMTError
 from .pattern import make_pattern_action
+from .pattern_lists import VERSION_STR
 
 
 class ImportGMT(Operator, ImportHelper):
@@ -527,9 +529,9 @@ class GMTImporter:
                         c.values = values
                     """
 
-        pattern_action = bpy.data.actions.get("GMT_Pattern")
-        if not pattern_action:
-            pattern_action = make_pattern_action()
+        pattern_action = bpy.data.actions.get(f"GMT_Pattern{VERSION_STR[version]}")
+        if not pattern_action and bpy.context.preferences.addons["yakuza_gmt"].preferences.get("use_patterns"):
+            pattern_action = make_pattern_action(version)
 
         bpy.context.scene.render.fps = frame_rate
         bpy.context.scene.frame_start = 0
@@ -594,48 +596,6 @@ def import_curve(c: Curve, b: Tuple[PoseBone, Bone], action: Action, group_name:
         fcurve.keyframe_points.foreach_set(
             "co", [x for co in zip(c.graph.keyframes, values) for x in co])
         fcurve.update()
-
-
-def transform_location(bone_props: Dict[str, GMTBoneProps], bone_name: str, values: List[Vector]):
-    prop = bone_props[bone_name]
-    head = prop.head
-    parent_head = bone_props.get(prop.parent_name)
-    if parent_head:
-        parent_head = parent_head.head
-    else:
-        parent_head = Vector()
-
-    loc = prop.loc
-    rot = prop.rot
-
-    values = list(map(lambda x: (
-        Matrix.Translation(loc).inverted()
-        @ rot.to_matrix().to_4x4().inverted()
-        @ Matrix.Translation(x - head + parent_head)
-        @ rot.to_matrix().to_4x4()
-        @ Matrix.Translation(loc)
-    ).to_translation(), values))
-
-    return values
-
-
-def transform_rotation(bone_props: Dict[str, GMTBoneProps], bone_name: str, values: List[Quaternion]):
-    prop = bone_props[bone_name]
-
-    loc = prop.loc
-    rot = prop.rot
-    rot_local = prop.rot_local
-
-    values = list(map(lambda x: (
-        Matrix.Translation(loc).inverted()
-        @ rot.to_matrix().to_4x4().inverted()
-        @ rot_local.to_matrix().to_4x4().inverted()
-        @ x.to_matrix().to_4x4()
-        @ rot.to_matrix().to_4x4()
-        @ Matrix.Translation(loc)
-    ).to_quaternion(), values))
-
-    return values
 
 
 def rotate_quat(quat1: Quaternion, quat2: Quaternion) -> Quaternion:

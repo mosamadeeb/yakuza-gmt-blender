@@ -1,6 +1,6 @@
 import bpy
 from bpy.app.handlers import persistent
-from bpy.props import StringProperty
+from bpy.props import BoolProperty, StringProperty
 from bpy.types import AddonPreferences
 
 from .exporter import ExportGMT, menu_func_export
@@ -11,50 +11,49 @@ from .pattern import PatternIndicesPanel, PatternPanel, apply_patterns
 class GMTPatternPreferences(AddonPreferences):
     bl_idname = "yakuza_gmt"
 
-    # TODO: Add descriptions for these
+    use_patterns: BoolProperty(
+        name="Use Patterns",
+        description="""If disabled, patterns will not be applied to animations, and will not be loaded into
+blender with the first GMT import in each session. Reduces load times and improves performance when disabled""",
+        default=True)
 
     old_par: StringProperty(
         name="Y3, 4, 5 Pattern.par",
         description="""Path to Old Engine Pattern.par. Can be found in <game_directory>/data/motion/ folder.
 Yakuza 5 par contains more patterns than Yakuza 3/4 par""",
-        subtype='FILE_PATH',
-    )
+        subtype='FILE_PATH')
 
     new_par: StringProperty(
         name="Y0, K1 Pattern.par",
         description="Path to Yakuza 0/Kiwami 1 Pattern.par. Can be found in <game_directory>/data/motion/ folder",
-        subtype='FILE_PATH',
-    )
+        subtype='FILE_PATH')
 
     dragon_par: StringProperty(
         name="Y6, 7, K2 motion.par",
         description="""Path to Dragon Engine motion.par. Can be any par archive containing DE patterns.
 Yakuza 7 par contains more patterns than Yakuza 6/Kiwami 2/Judgment par""",
-        subtype='FILE_PATH',
-    )
+        subtype='FILE_PATH')
 
     old_bone_par: StringProperty(
         name="Y3, 4, 5 bone.par",
         description="Path to Old Engine bone.par. Can be found in <game_directory>/data/chara_common/ folder",
-        subtype='FILE_PATH',
-    )
+        subtype='FILE_PATH')
 
     new_bone_par: StringProperty(
         name="Y0, K1 bone.par",
         description="Path to Yakuza 0/Kiwami 1 bone.par. Can be found in <game_directory>/data/chara_common/ folder",
-        subtype='FILE_PATH',
-    )
+        subtype='FILE_PATH')
 
     dragon_bone_par: StringProperty(
         name="Y6, 7, K2 chara.par",
         description="Path to Dragon Engine chara.par. Can be any par archive containing DE bone GMDs",
-        subtype='FILE_PATH',
-    )
+        subtype='FILE_PATH')
 
     def draw(self, context):
         layout = self.layout
+        layout.prop(self, "use_patterns")
         layout.label(
-            text="Choose the path for Pattern.par for each engine version. Required for pattern previewing")
+            text="Choose the path for Pattern.par and bone.par for each engine version. Required for pattern previewing")
         layout.prop(self, "old_par")
         layout.prop(self, "new_par")
         layout.prop(self, "dragon_par")

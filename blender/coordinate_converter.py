@@ -1,7 +1,9 @@
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
-from mathutils import Quaternion, Vector
+from mathutils import Matrix, Quaternion, Vector
+
 from ..structure.curve import Curve
+from .bone_props import GMTBoneProps
 
 
 def transform_position_gmd_to_blender(pos: Vector) -> Vector:
@@ -54,3 +56,45 @@ def convert_gmt_to_blender(curve: Curve):
     elif "pat1" in curve.data_path:
         return pattern_to_blender(curve.values)
     return curve.values
+
+
+def transform_location(bone_props: Dict[str, GMTBoneProps], bone_name: str, values: List[Vector]):
+    prop = bone_props[bone_name]
+    head = prop.head
+    parent_head = bone_props.get(prop.parent_name)
+    if parent_head:
+        parent_head = parent_head.head
+    else:
+        parent_head = Vector()
+
+    loc = prop.loc
+    rot = prop.rot
+
+    values = list(map(lambda x: (
+        Matrix.Translation(loc).inverted()
+        @ rot.to_matrix().to_4x4().inverted()
+        @ Matrix.Translation(x - head + parent_head)
+        @ rot.to_matrix().to_4x4()
+        @ Matrix.Translation(loc)
+    ).to_translation(), values))
+
+    return values
+
+
+def transform_rotation(bone_props: Dict[str, GMTBoneProps], bone_name: str, values: List[Quaternion]):
+    prop = bone_props[bone_name]
+
+    loc = prop.loc
+    rot = prop.rot
+    rot_local = prop.rot_local
+
+    values = list(map(lambda x: (
+        Matrix.Translation(loc).inverted()
+        @ rot.to_matrix().to_4x4().inverted()
+        @ rot_local.to_matrix().to_4x4().inverted()
+        @ x.to_matrix().to_4x4()
+        @ rot.to_matrix().to_4x4()
+        @ Matrix.Translation(loc)
+    ).to_quaternion(), values))
+
+    return values

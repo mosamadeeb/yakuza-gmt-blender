@@ -4,8 +4,6 @@ import bpy
 from bpy.types import EditBone
 from mathutils import Quaternion, Vector
 
-from .coordinate_converter import pos_to_blender, rot_to_blender
-
 
 class GMTBoneProps:
     head: Vector
@@ -48,18 +46,19 @@ def get_bones_props(edit_bones: List[EditBone]) -> Dict[str, GMTBoneProps]:
         bone_props[b.name] = bp
     return bone_props
 
+# TODO: Using GMDs for patterns is disabled
 
-def get_gmd_bones_props(gmd_bones) -> Dict[str, Tuple[Vector, str]]:
-    heads = {}
-    for b in gmd_bones:
-        parent_name = b.parent_recursive[0].name if len(
-            b.parent_recursive) else ""
-        heads[b.name] = (pos_to_blender(Vector(b.global_pos[:3])), parent_name)
+# def get_gmd_bones_props(gmd_bones) -> Dict[str, Tuple[Vector, str]]:
+#     heads = {}
+#     for b in gmd_bones:
+#         parent_name = b.parent_recursive[0].name if len(
+#             b.parent_recursive) else ""
+#         heads[b.name] = (pos_to_blender(Vector(b.global_pos[:3])), parent_name)
 
-    if not len(heads):
-        return get_edit_bones_props()
+#     if not len(heads):
+#         return get_edit_bones_props()
 
-    return heads
+#     return heads
 
 # FIXME: This needs to be updated according to the recent changes in the importer
 

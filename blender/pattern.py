@@ -10,8 +10,9 @@ from ..structure.bone import find_bone
 from ..structure.curve import Curve, new_pos_curve, new_rot_curve
 from ..structure.types.format import get_curve_properties
 from ..yakuza_par_py.src import *
-from .bone_props import get_edit_bones_props, get_gmd_bones_props
-from .coordinate_converter import convert_gmt_to_blender
+from .bone_props import GMTBoneProps, get_edit_bones_props
+from .coordinate_converter import (convert_gmt_to_blender, transform_location,
+                                   transform_rotation)
 from .error import GMTError
 from .pattern_lists import *
 
@@ -72,15 +73,17 @@ class PatternIndicesPanel(PatternBasePanel, Panel):
             box.label(text=text)
 
 
-def import_curve_from_pattern(c: Curve, action: Action, pattern_index: int, group_name: str, head: Vector, parent_head: Vector):
+def import_curve_from_pattern(c: Curve, action: Action, pattern_index: int, group_name: str, bone_props: Dict[str, GMTBoneProps], bone_name: str):
     if not c.data_path:
         c.data_path = get_curve_properties(c.curve_format)
     if c.data_path == "":
         return
     values = convert_gmt_to_blender(c)
     if "location" in c.data_path:
+        values = transform_location(bone_props, bone_name, values)
+
         for v in range(len(values[0])):
-            vs = [(x[v] - head[v]) + parent_head[v] for x in values]
+            vs = [x[v] for x in values]
 
             fcurve = action.fcurves.new(data_path=(
                 f'pose.bones["{group_name}_{pattern_index}"].{c.data_path}'), index=v, action_group=group_name)
@@ -89,6 +92,8 @@ def import_curve_from_pattern(c: Curve, action: Action, pattern_index: int, grou
                 "co", [x for co in zip(c.graph.keyframes, vs) for x in co])
             fcurve.update()
     elif "rotation_quaternion" in c.data_path:
+        values = transform_rotation(bone_props, bone_name, values)
+
         for v in range(len(values[0])):
             vs = [x[v] for x in values]
 
@@ -100,7 +105,7 @@ def import_curve_from_pattern(c: Curve, action: Action, pattern_index: int, grou
             fcurve.update()
 
 
-def make_pattern_curves(action: Action, groups: Dict[str, ActionGroup], prefs: Preferences) -> None:
+def make_pattern_curves(action: Action, groups: Dict[str, ActionGroup], prefs: Preferences, version: int) -> None:
     try:
         path_list = []
         for paths in [["old_par", "new_par", "dragon_par"], ["old_bone_par", "new_bone_par", "dragon_bone_par"]]:
@@ -109,70 +114,77 @@ def make_pattern_curves(action: Action, groups: Dict[str, ActionGroup], prefs: P
 
         pars, gmds = path_list[:3], path_list[3:]
 
-        for p, g, fl, bl, v in zip(pars, gmds, FILE_NAME_LISTS, HAND_BONES_LISTS, VERSION_STR):
-            if not p:
-                continue
-            par = read_par(p)
+        p = pars[version]
+        g = gmds[version]
+        fl = FILE_NAME_LISTS[version]
+        bl = HAND_BONES_LISTS[version]
+        v = VERSION_STR[version]
 
-            heads = get_edit_bones_props()
-            if g:
-                bone_par = read_par(g)
-                gmd = bone_par.get_file("c_am_bone.gmd")
-                if gmd:
-                    heads = get_gmd_bones_props(
-                        read_gmd_bones_from_data(decompress_file(gmd)))
+        if not p:
+            return
 
-            for i in range(len(fl)):
-                file = par.get_file(fl[i])
-                if not file:
-                    for b in bl:
-                        group = groups.get(f"{b}{v}")
-                        import_curve_from_pattern(
-                            new_pos_curve(), action, i, group.name, Vector(), Vector())
-                        import_curve_from_pattern(
-                            new_rot_curve(), action, i, group.name, Vector(), Vector())
-                    continue
-                gmt = read_gmt_file_from_data(decompress_file(file))
+        par = read_par(p)
+
+        bone_props = get_edit_bones_props()
+
+        # TODO: Using GMDs for patterns is disabled
+        # if g:
+        #     bone_par = read_par(g)
+        #     gmd = bone_par.get_file("c_am_bone.gmd")
+        #     if gmd:
+        #         bone_props = get_gmd_bones_props(
+        #             read_gmd_bones_from_data(decompress_file(gmd)))
+
+        for i in range(len(fl)):
+            file = par.get_file(fl[i])
+            if not file:
                 for b in bl:
                     group = groups.get(f"{b}{v}")
+                    import_curve_from_pattern(
+                        new_pos_curve(), action, i, group.name, bone_props, b)
+                    import_curve_from_pattern(
+                        new_rot_curve(), action, i, group.name, bone_props, b)
+                continue
+            gmt = read_gmt_file_from_data(decompress_file(file))
+            for b in bl:
+                group = groups.get(f"{b}{v}")
 
-                    bone, _ = find_bone(b, gmt.bones)
-                    if not bone:
-                        import_curve_from_pattern(
-                            new_pos_curve(), action, i, group.name, Vector(), Vector())
-                        import_curve_from_pattern(
-                            new_rot_curve(), action, i, group.name, Vector(), Vector())
-                        continue
+                bone, _ = find_bone(b, gmt.bones)
+                if not bone:
+                    import_curve_from_pattern(
+                        new_pos_curve(), action, i, group.name, bone_props, b)
+                    import_curve_from_pattern(
+                        new_rot_curve(), action, i, group.name, bone_props, b)
+                    continue
 
-                    head, parent = heads[bone.name.string()]
-                    parent = heads.get(parent)
-                    parent_head = parent[0] if parent else Vector()
-
-                    for curve in bone.curves:
-                        import_curve_from_pattern(curve, action, i, group.name,
-                                                  head, parent_head)
+                for curve in bone.curves:
+                    import_curve_from_pattern(
+                        curve, action, i, group.name, bone_props, b)
 
     except GMTError as error:
         print(str(error))
         print("Unable to read Pattern pars. Make sure the paths set in the addon preferences are correct.")
 
 
-def make_pattern_groups(action: Action) -> Dict[str, ActionGroup]:
+def make_pattern_groups(action: Action, version: int) -> Dict[str, ActionGroup]:
     groups = dict()
-    for bl, v in zip(HAND_BONES_LISTS, VERSION_STR):
-        for b in bl:
-            groups[f"{b}{v}"] = action.groups.new(f"{b}{v}")
+
+    bl = HAND_BONES_LISTS[version]
+    v = VERSION_STR[version]
+    for b in bl:
+        groups[f"{b}{v}"] = action.groups.new(f"{b}{v}")
 
     return groups
 
 
-def make_pattern_action() -> Action:
+def make_pattern_action(version: int) -> Action:
     preferences = bpy.context.preferences
     addon_prefs = preferences.addons["yakuza_gmt"].preferences
 
-    pattern_action = bpy.data.actions.new("GMT_Pattern")
-    groups = make_pattern_groups(pattern_action)
-    make_pattern_curves(pattern_action, groups, addon_prefs)
+    pattern_action = bpy.data.actions.new(
+        f"GMT_Pattern{VERSION_STR[version]}")
+    groups = make_pattern_groups(pattern_action, version)
+    make_pattern_curves(pattern_action, groups, addon_prefs, version)
 
     return pattern_action
 
@@ -227,10 +239,10 @@ def evaluate_rotation_quaternion(p1: int, p2: int, f: float, c: List[FCurve]) ->
 
 @bpy.app.handlers.persistent
 def apply_patterns(scene):
-    frame = scene.frame_current
-    pattern_action = bpy.data.actions.get("GMT_Pattern")
-    if not pattern_action:
+    if not bpy.context.preferences.addons["yakuza_gmt"].preferences.get("use_patterns"):
         return
+
+    frame = scene.frame_current
 
     for collection in bpy.data.collections:
         for object in [o for o in collection.objects if o.animation_data and o.animation_data.action]:
@@ -243,9 +255,12 @@ def apply_patterns(scene):
                 version = 0
                 if not pattern_c_n:
                     continue
-
-            if version == 1 and object.pose.bones.get("koyu0_r_n"):
+            elif object.pose.bones.get("koyu0_r_n"):
                 version = 2
+
+            pattern_action = bpy.data.actions.get(f"GMT_Pattern{VERSION_STR[version]}")
+            if not pattern_action:
+                continue
 
             pl_curve = None
             pr_curve = None
