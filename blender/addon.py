@@ -73,7 +73,7 @@ classes = (
 
 @persistent
 def change_interpolation(scene):
-    if bpy.context.active_object.animation_data:
+    if bpy.context.active_object and bpy.context.active_object.animation_data:
         for f in bpy.context.active_object.animation_data.action.fcurves:
             if "pat1" in f.data_path:
                 for k in f.keyframe_points:
