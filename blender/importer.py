@@ -7,13 +7,14 @@ from bpy.types import Action, Operator, PoseBone
 from bpy_extras.io_utils import ImportHelper
 from mathutils import Euler, Matrix, Quaternion, Vector
 
+from ..gmt_lib import *
 from ..read import read_gmt_file
 from ..read_cmt import *
 from ..structure.file import *
 from ..structure.types.format import get_curve_properties
-from .bone_props import GMTBoneProps, get_edit_bones_props
-from .coordinate_converter import (convert_gmt_to_blender, transform_location,
-                                   transform_rotation)
+from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
+from .coordinate_converter import (convert_gmt_curve_to_blender,
+                                   transform_location, transform_rotation)
 from .error import GMTError
 from .pattern import make_pattern_action
 from .pattern_lists import VERSION_STR
@@ -25,53 +26,23 @@ class ImportGMT(Operator, ImportHelper):
     bl_label = "Import Yakuza GMT"
 
     filter_glob: StringProperty(default="*.gmt;*.cmt", options={"HIDDEN"})
-    # files: CollectionProperty(
-    #    name="File Path",
-    #    type=bpy.types.OperatorFileListElement,
-    # )
-    # Only allow importing one file at a time
-    #file: StringProperty(name="File Path", subtype="FILE_PATH")
 
-    #load_materials: BoolProperty(name="Load DE Animation For Old Engine", default=True)
-    """
-    def item_callback(self, context):
-        return (
-            ('NO_CHANGE', 'No change', "Import/Export to same type of skeleton"),
-            ('FIX_FROM_DE', 'From Dragon Engine', "Dragon Engine animation to old engine skeleton"),
-            ('FIX_FROM_OLD', 'To Dragon Engine', "Old engine animation to Dragon Engine skeleton"),
-        )
-    """
-    center_only: BoolProperty(
-        name="Force Use center_c_n",
-        description="Use center bone only for whole translation and ignore vector bone. Breaks post-Y5 GMTs.")
+    merge_vector_curves: BoolProperty(
+        name='Merge Vector',
+        description='Merges vector_c_n animation into center_c_n, to allow for easier editing/previewing.\n'
+                    'Does not affect Y3-5 animations',
+        default=True
+    )
 
-    de_bone_fix: EnumProperty(
-        items=[('NO_CHANGE', 'None', "Import/Export to same type of skeleton"),
-               ('FIX_FROM_OLD', 'From Old Engine',
-                "Old engine animation to Dragon Engine skeleton"),
-               ('FIX_FROM_DE', 'From Dragon Engine', "Dragon Engine animation to old engine skeleton")],
-        name="DE Bone Fix",
-        description="Fix Dragon Engine animations' bone rotation when using an old engine skeleton, or vice versa",
-        default=None,
-        options={'ANIMATABLE'},
-        update=None,
-        get=None,
-        set=None)
-
-    frame_density: EnumProperty(
-        items=[('HIGHEST', 'Highest (100%)', "Import all keyframes"),
-               ('HIGHER', 'Higher (75%)', "Import 3/4 of the keyframes"),
-               ('HIGH', 'High (66%)', "Import 2/3 of the keyframes"),
-               ('MEDIUM', 'Medium (50%)', "Import half of the keyframes"),
-               ('LOW', 'Low (33%)', "Import 1/3 of the keyframes"),
-               ('LOWEST', 'Lowest (25%)', "Import 1/4 of the keyframes")],
-        name="Frame Density",
-        description="Percentage of frames to import (lower options may increase performance)",
-        default=None,
-        options={'ANIMATABLE'},
-        update=None,
-        get=None,
-        set=None)
+    is_auth: BoolProperty(
+        name='Is Auth/Hact',
+        description='Specify the animation\'s origin.\n'
+                    'If this is enabled, then the animation should be from hact.par or auth folder. '
+                    'Otherwise, it will be treated as being from motion folder.\n'
+                    'Needed for proper vector merging for Y0/K1.\n'
+                    'Does not affect Y3-Y5 or DE. Does not affect anything if Merge Vector is disabled',
+        default=False
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -79,10 +50,11 @@ class ImportGMT(Operator, ImportHelper):
         layout.use_property_split = True
         layout.use_property_decorate = True  # No animation.
 
-        layout.prop(self, 'center_only')
-        layout.prop(self, 'de_bone_fix')
+        layout.prop(self, 'merge_vector_curves')
 
-        #layout.prop(self, 'frame_density')
+        is_auth_row = layout.row()
+        is_auth_row.prop(self, 'is_auth')
+        is_auth_row.enabled = self.merge_vector_curves
 
     def execute(self, context):
         import time
@@ -318,23 +290,22 @@ class CMTImporter:
 class GMTImporter:
     def __init__(self, filepath, import_settings: Dict):
         self.filepath = filepath
-        self.center_only = import_settings.get("center_only")
-        self.de_bone_fix = import_settings.get("de_bone_fix")
-        self.frame_density = import_settings.get("frame_density")
+        self.merge_vector_curves = import_settings.get('merge_vector_curves')
+        self.is_auth = import_settings.get('is_auth')
 
-    gmt_file: GMTFile
+    gmt: GMT
 
     def read(self):
-        self.gmt_file = read_gmt_file(self.filepath)
-        if type(self.gmt_file) is str:
-            raise GMTError(self.gmt_file)
-
+        # try:
+        self.gmt = read_gmt(self.filepath)
         self.make_actions()
+        # except Exception as e:
+        #     raise GMTError(f'{e}')
 
     def make_actions(self):
         ao = bpy.context.active_object
 
-        print("Importing file: " + self.gmt_file.header.file_name.string())
+        print(f'Importing file: {self.gmt.name}')
 
         if not ao.animation_data:
             ao.animation_data_create()
@@ -352,258 +323,204 @@ class GMTImporter:
         bpy.ops.object.mode_set(mode=mode)
         ao.hide_set(hidden)
 
-        version = 0  # no vector and not dragon engine
-        if self.gmt_file.header.version >= 0x20002:
-            version = 2  # has vector and is dragon engine
-            for name in self.gmt_file.names:
-                # TODO: This assumes that converting to Y0/K1 will add a scale bone
-                if name.string() == "scale":
-                    version = 1  # has vector only
-                    break
+        vector_version = self.gmt.vector_version
 
-        frame_count = 1
+        end_frame = 1
         frame_rate = 30
-        for anm in self.gmt_file.animations:
-            frame_count = max(frame_count, anm.frame_count)
+        for anm in self.gmt.animation_list:
+            end_frame = max(end_frame, anm.end_frame)
             frame_rate = anm.frame_rate
 
-            act_name = f"{anm.name.string()}({self.gmt_file.header.file_name.string()})"
+            act_name = f'{anm.name}[{self.gmt.name}]'
 
             ao.animation_data.action = bpy.data.actions.new(name=act_name)
             action = ao.animation_data.action
 
-            bones = {}
-            for b in anm.bones:
-                if b.name.string() in ao.pose.bones:
-                    bones[ao.pose.bones[b.name.string()]] = b
+            bones: Dict[str, GMTBone] = dict()
+            for bone_name in anm.bones:
+                if bone_name in ao.pose.bones:
+                    bones[bone_name] = anm.bones[bone_name]
                 else:
-                    print('WARNING: Skipped bone: "%s"' % b.name.string())
+                    print(f'WARNING: Skipped bone: "{bone_name}"')
 
-            if str(self.de_bone_fix) != "NO_CHANGE":
-                ketu = [x for x in bones.items() if "ketu" in x[1].name.string()]
-                kosi = [x for x in bones.items() if "kosi" in x[1].name.string()]
-                if len(ketu) and len(kosi):
-                    bone_pair = (ketu[0][1], kosi[0][1])
-                    for c in bone_pair[0].curves:
-                        c.data_path = get_curve_properties(c.curve_format)
-                    if not len([x for x in bone_pair[1].curves if 'POS' in x.curve_format.name]):
-                        bone_pair[1].curves.append(bone_pair[0].curves[0])
-                    for c in bone_pair[1].curves:
-                        values = []
-                        c.data_path = get_curve_properties(c.curve_format)
-                        c_ketu = [
-                            x for x in bone_pair[0].curves if x.data_path == c.data_path][0]
-                        i = 0
-                        for k in c.graph.keyframes:
-                            kf = k
-                            if not k in c_ketu.graph.keyframes:
-                                kf = [
-                                    x for x in c_ketu.graph.keyframes if x < k][-1]
-                            ketu_value = c_ketu.values[c_ketu.graph.keyframes.index(
-                                kf)]
-                            kosi_value = c.values[i]
-                            if c.data_path == "location":
-                                ketu_v = Vector(
-                                    (-ketu_value[0], ketu_value[2], ketu_value[1]))
-                                if str(self.de_bone_fix) == "FIX_FROM_OLD":
-                                    new_value = [0, 0, 0, 0]
-                                elif str(self.de_bone_fix) == "FIX_FROM_DE":
-                                    new_value = [*ketu_v]
-                                values.append(
-                                    Vector((-new_value[0], new_value[2], new_value[1])))
-                            elif c.data_path == "rotation_quaternion":
-                                ketu_v = Quaternion(
-                                    (ketu_value[3], -ketu_value[0], ketu_value[2], ketu_value[1]))
-                                kosi_v = Quaternion(
-                                    (kosi_value[3], -kosi_value[0], kosi_value[2], kosi_value[1]))
-                                if str(self.de_bone_fix) == "FIX_FROM_OLD":
-                                    new_value = [
-                                        *ketu_v.inverted().cross(kosi_v)]
-                                elif str(self.de_bone_fix) == "FIX_FROM_DE":
-                                    new_value = [*ketu_v.cross(kosi_v)]
-                                values.append(new_value)
-                            i += 1
-                        if len(values):
-                            c.values = values
-                    bones[kosi[0][0]] = bone_pair[1]
+            # Convert curves early to allow for easier GMT modification before creating FCurves
+            for bone_name in bones:
+                for curve in bones[bone_name].curves:
+                    convert_gmt_curve_to_blender(curve)
+
+            # Try merging vector into center
+            if self.merge_vector_curves:
+                merge_vector(bones.get('center_c_n'), bones.get('vector_c_n'), vector_version, self.is_auth)
 
             bone_props = get_edit_bones_props()
 
-            # Frame density
-            """
-            if self.frame_density != 'HIGHEST':
-                if self.frame_density == 'HIGHER':
-                    factor = (4, 0)
-                elif self.frame_density == 'HIGH':
-                    factor = (3, 0)
-                elif self.frame_density == 'MEDIUM':
-                    factor = (2, 0)
-                elif self.frame_density == 'LOW':
-                    factor = (2, 1)
-                elif self.frame_density == 'LOWEST':
-                    factor = (2, 2)
-            """
+            for bone_name in bones:
+                group = action.groups.new(bone_name)
+                print(f'Importing ActionGroup: {group.name}')
 
-            for b in bones.items():
-                b = tuple(b)
-                group = action.groups.new(b[0].name)
-                print("Importing ActionGroup: " + group.name)
+                for curve in bones[bone_name].curves:
+                    import_curve(curve, bone_name, action, group.name, bone_props)
 
-                if group.name == "center_c_n":
-                    # Remove vector drivers
-                    # TODO: Add a button somewhere to re-add the drivers in center_only mode
-                    for data_path in ("location", "rotation_quaternion"):
-                        b[0].driver_remove(data_path)
-
-                    if version > 0 and not self.center_only:
-                        for c in b[1].curves:
-                            c.data_path = "gmt_" + \
-                                get_curve_properties(c.curve_format)
-
-                        # Move center's gmt_ curves to vector to avoid dependency cycles
-                        for v in bones.items():
-                            if v[1].name.string() == "vector_c_n":
-                                v[1].curves.extend(b[1].curves)
-                                b[1].curves.clear()
-                                break
-
-                        for d, n in zip(("location", "rotation_quaternion"), (3, 4)):
-                            for i in range(n):
-                                driver = b[0].driver_add(d, i).driver
-                                driver.type = 'SCRIPTED'
-
-                                var = driver.variables.new()
-                                var.name = "vector"
-                                var.targets[0].id = ao
-                                var.targets[0].bone_target = "vector_c_n"
-                                var.targets[0].data_path = f'pose.bones["vector_c_n"].{d}[{i}]'
-
-                                # Z-axis specific
-                                if d == "location" and i == 1:
-                                    c_head = bone_props.get(group.name).head[2]
-                                    if version == 2:
-                                        # DE: set center's Z-axis to that of vector
-                                        driver.expression = f"vector - {c_head}"
-                                    else:
-                                        var = driver.variables.new()
-                                        var.name = "center"
-                                        var.targets[0].id = ao
-                                        var.targets[0].bone_target = "vector_c_n"
-                                        var.targets[0].data_path = f'pose.bones["vector_c_n"].gmt_{d}[{i}]'
-
-                                        # Non DE: set center's Z-axis to that of its own FCurve added to that of vector
-                                        driver.expression = f"center + vector - {c_head}"
-                                else:
-                                    driver.expression = "vector"
-
-                for c in b[1].curves:
-                    import_curve(c, b, action, group.name, bone_props)
-                    # Frame density
-                    """
-                    if self.frame_density != 'HIGHEST':
-                        i = 0
-                        n = 0
-                        new_frames, indices, values = [0], [0], []
-                        for f in c.graph.keyframes:
-                            if i % factor[0]:
-                                indices.append(c.graph.keyframes.index(f))
-                                new_frames.append(f)
-                                i += 1
-                                continue
-                            if (f - new_frames[-1]) > 4 or c.graph.keyframes.index(f) == len(c.graph.keyframes) - 1:
-                                indices.append(c.graph.keyframes.index(f))
-                                new_frames.append(f)
-                                i += 1
-                                continue
-                            if n < factor[1]:
-                                n += 1
-                                continue
-                            n = 0
-                            i += 1
-                        c.graph.keyframes = new_frames
-                        c.graph.values_indices = indices
-                        print(f"first: {c.values[0]}")
-                        for i in indices:
-                            values.append(c.values[i])
-                        print(f"first2: {c.values[0]}")
-                        c.values = values
-                    """
-
-        pattern_action = bpy.data.actions.get(f"GMT_Pattern{VERSION_STR[version]}")
-        if not pattern_action and bpy.context.preferences.addons["yakuza_gmt"].preferences.get("use_patterns"):
-            pattern_action = make_pattern_action(version)
+        # pattern_action = bpy.data.actions.get(f"GMT_Pattern{VERSION_STR[vector_version]}")
+        # if not pattern_action and bpy.context.preferences.addons["yakuza_gmt"].preferences.get("use_patterns"):
+        #     pattern_action = make_pattern_action(vector_version)
 
         bpy.context.scene.render.fps = frame_rate
         bpy.context.scene.frame_start = 0
         bpy.context.scene.frame_current = 0
-        bpy.context.scene.frame_end = frame_count
+        bpy.context.scene.frame_end = end_frame
 
 
-def import_curve(c: Curve, b: Tuple[PoseBone, Bone], action: Action, group_name: str, bone_props: Dict[str, GMTBoneProps]):
-    if not c.data_path:
-        c.data_path = get_curve_properties(c.curve_format)
-    if c.data_path == "":
+def merge_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMTVectorVersion, is_auth: bool):
+    """Merges vector_c_n curves into center_c_n for easier modification.
+    Does not affect NO_VECTOR animations.
+    """
+
+    if vector_version == GMTVectorVersion.NO_VECTOR or not (center_bone and vector_bone):
         return
-    values = convert_gmt_to_blender(c)
-    if "location" in c.data_path:
-        values = transform_location(bone_props, b[0].name, values)
 
-        for v in range(len(values[0])):
-            vs = [x[v] for x in values]
+    if (vector_version == GMTVectorVersion.OLD_VECTOR and not is_auth) or vector_version == GMTVectorVersion.DRAGON_VECTOR:
+        # Both curves' values should be applied, so add vector to center
+        add_curve(center_bone.location, vector_bone.location)
+        add_curve(center_bone.rotation, vector_bone.rotation)
 
-            fcurve = action.fcurves.new(data_path=(
-                'pose.bones["%s"].' % b[0].name + c.data_path), index=v, action_group=group_name)
-            fcurve.keyframe_points.add(len(c.graph.keyframes))
-            fcurve.keyframe_points.foreach_set(
-                "co", [x for co in zip(c.graph.keyframes, vs) for x in co])
-            fcurve.update()
-    elif "rotation_quaternion" in c.data_path:
-        # if 'oya1' in b[0].name:
-        """
-            LOCAL ROT FIX DISABLED
-            #values = list(map(lambda x: rotate_quat(local_rots[b[0].name].inverted(), Quaternion(x)), values))
-        """
-        # if 'oya2' in b[0].name or 'oya3' in b[0].name:
-        #    values = list(map(lambda x: local_rots[b[0].name] @ Quaternion(x), values))
+    # Reset vector's curves to avoid confusion, since it won't be used anymore
+    vector_bone.location = GMTCurve(GMTCurveType.LOCATION)
+    vector_bone.rotation = GMTCurve(GMTCurveType.ROTATION)
 
-        values = transform_rotation(bone_props, b[0].name, values)
 
-        for v in range(len(values[0])):
-            vs = [x[v] for x in values]
-            fcurve = action.fcurves.new(data_path=(
-                'pose.bones["%s"].' % b[0].name + c.data_path), index=v, action_group=group_name)
-            fcurve.keyframe_points.add(len(c.graph.keyframes))
-            fcurve.keyframe_points.foreach_set(
-                "co", [x for co in zip(c.graph.keyframes, vs) for x in co])
-            fcurve.update()
-    elif "pat1" in c.data_path and hasattr(b[0], c.data_path):
+def add_curve(curve: GMTCurve, other: GMTCurve):
+    """Adds the animation data of a curve to this curve. Both curves need to have the same GMTCurveType.
+    If the type is LOCATION, vectors will be added.
+    If the type is ROTATION, quaternions will be multiplied.
+    """
+
+    if curve.type != other.type:
+        raise Exception('Curves with different types cannot be added')
+
+    if curve.type == GMTCurveType.LOCATION:
+        # Vector add and lerp
+        def add(v1, v2): return v1 + v2
+        def lerp(v1, v2, f): return v1.lerp(v2, f)
+
+        if len(curve.keyframes) == 0:
+            curve.keyframes.append(GMTKeyframe(0, Vector()))
+    elif curve.type == GMTCurveType.ROTATION:
+        # Quaternion multiply and slerp
+        def add(v1, v2): return v1 @ v2
+        def lerp(v1, v2, f): return v1.slerp(v2, f)
+
+        if len(curve.keyframes) == 0:
+            curve.keyframes.append(GMTKeyframe(0, Quaternion()))
+    else:
+        raise Exception('Incompatible curve type for addition')
+
+    result = list()
+    curve_dict = {kf.frame: kf.value for kf in curve.keyframes}
+    curve_min = curve.keyframes[0].frame
+    curve_max = curve.keyframes[-1].frame
+
+    other_dict = {kf.frame: kf.value for kf in other.keyframes}
+    other_min = other.keyframes[0].frame
+    other_max = other.keyframes[-1].frame
+
+    # Iterate over frames from 0 to the last frame in either curve
+    for i in range(max(curve.get_end_frame(), other.get_end_frame()) + 1):
+        # Check if the current frame has a keyframe
+        v1 = curve_dict.get(i)
+        v2 = other_dict.get(i)
+
+        # Do not add/interpolate if no values are explicitly specified in this frame
+        if not (v1 is None and v2 is None):
+            if v1 is None:
+                # Get the last keyframe that is less than the current frame, or the first keyframe
+                less = next((k for k in reversed(curve_dict) if k < i), curve_min)
+
+                # Get the first keyframe that is greater than the current frame, or the last keyframe
+                more = next((k for k in curve_dict if k > i), curve_max)
+
+                # Interpolate between the two values for the current frame, or use the only value if there is only 1 keyframe
+                v1 = lerp(curve_dict[less], curve_dict[more], (i - less) /
+                          (more - less)) if less != more else curve_dict[less]
+            if v2 is None:
+                less = next((k for k in reversed(other_dict) if k < i), other_min)
+                more = next((k for k in other_dict if k > i), other_max)
+                v2 = lerp(other_dict[less], other_dict[more], (i - less) /
+                          (more - less)) if less != more else other_dict[less]
+
+            result.append(GMTKeyframe(i, add(v1, v2)))
+
+    curve.keyframes = result
+
+
+def import_curve(curve: GMTCurve, bone_name: str, action: Action, group_name: str, bone_props: Dict[str, GMTBlenderBoneProps]):
+    data_path = get_property_from_curve_type(curve.type, curve.channel)
+
+    if data_path == '' or len(curve.keyframes) == 0:
+        return
+
+    frames, values = zip(*map(lambda kf: (kf.frame, kf.value), curve.keyframes))
+
+    if data_path == 'location':
+        values = transform_location(bone_props, bone_name, values)
+    elif data_path == 'rotation_quaternion':
+        # # if 'oya1' in b[0].name:
+        # """
+        #     LOCAL ROT FIX DISABLED
+        #     #values = list(map(lambda x: rotate_quat(local_rots[b[0].name].inverted(), Quaternion(x)), values))
+        # """
+        # # if 'oya2' in b[0].name or 'oya3' in b[0].name:
+        # #    values = list(map(lambda x: local_rots[b[0].name] @ Quaternion(x), values))
+        values = transform_rotation(bone_props, bone_name, values)
+
+    # elif "pat1" in c.data_path and hasattr(b[0], c.data_path):
+    #     fcurve = action.fcurves.new(data_path=(
+    #         'pose.bones["%s"].' % b[0].name + c.data_path), action_group=group_name)
+    #     fcurve.keyframe_points.add(len(c.graph.keyframes))
+    #     fcurve.keyframe_points.foreach_set(
+    #         "co", [x for co in zip(c.graph.keyframes, values) for x in co])
+
+    #     # Pattern keyframes should have no interpolation
+    #     for kf in fcurve.keyframe_points:
+    #         kf.interpolation = 'CONSTANT'
+
+    #     fcurve.update()
+    # elif hasattr(b[0], c.data_path):
+    #     #setattr(bpy.types.PoseBone, c.data_path, bpy.props.IntProperty(name="Pat2 Unk"))
+    #     fcurve = action.fcurves.new(data_path=(
+    #         'pose.bones["%s"].' % b[0].name + c.data_path), action_group=group_name)
+    #     fcurve.keyframe_points.add(len(c.graph.keyframes))
+    #     fcurve.keyframe_points.foreach_set(
+    #         "co", [x for co in zip(c.graph.keyframes, values) for x in co])
+    #     fcurve.update()
+    else:
+        return
+
+    for i, values_channel in enumerate(zip(*values)):
         fcurve = action.fcurves.new(data_path=(
-            'pose.bones["%s"].' % b[0].name + c.data_path), action_group=group_name)
-        fcurve.keyframe_points.add(len(c.graph.keyframes))
-        fcurve.keyframe_points.foreach_set(
-            "co", [x for co in zip(c.graph.keyframes, values) for x in co])
-
-        # Pattern keyframes should have no interpolation
-        for kf in fcurve.keyframe_points:
-            kf.interpolation = 'CONSTANT'
-
-        fcurve.update()
-    elif hasattr(b[0], c.data_path):
-        #setattr(bpy.types.PoseBone, c.data_path, bpy.props.IntProperty(name="Pat2 Unk"))
-        fcurve = action.fcurves.new(data_path=(
-            'pose.bones["%s"].' % b[0].name + c.data_path), action_group=group_name)
-        fcurve.keyframe_points.add(len(c.graph.keyframes))
-        fcurve.keyframe_points.foreach_set(
-            "co", [x for co in zip(c.graph.keyframes, values) for x in co])
+            f'pose.bones["{bone_name}"].{data_path}'), index=i, action_group=group_name)
+        fcurve.keyframe_points.add(len(frames))
+        fcurve.keyframe_points.foreach_set('co', [x for co in zip(frames, values_channel) for x in co])
         fcurve.update()
 
 
-def rotate_quat(quat1: Quaternion, quat2: Quaternion) -> Quaternion:
-    quat1.rotate(quat2)
-    return quat1
-    # return quat2.inverted().rotate(quat1)
+def get_property_from_curve_type(curve_type: GMTCurveType, curve_channel: GMTCurveChannel) -> str:
+    if curve_type == GMTCurveType.LOCATION:
+        return 'location'
+    elif curve_type == GMTCurveType.ROTATION:
+        return 'rotation_quaternion'
+    elif curve_type == GMTCurveType.PATTERN_HAND:
+        if curve_channel == GMTCurveChannel.LEFT_HAND:
+            return 'pat1_left_hand'
+        elif curve_channel == GMTCurveChannel.RIGHT_HAND:
+            return 'pat1_right_hand'
+        elif curve_channel == GMTCurveChannel.UNK_HAND:
+            return 'pat1_unk2'
+        else:
+            return 'pat1_unk3'
+    else:
+        return ''
 
 
 def menu_func_import(self, context):
-    self.layout.operator(ImportGMT.bl_idname,
-                         text='Yakuza Animation (.gmt/.cmt)')
+    self.layout.operator(ImportGMT.bl_idname, text='Yakuza Animation (.gmt/.cmt)')

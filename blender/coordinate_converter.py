@@ -2,8 +2,9 @@ from typing import Dict, List, Tuple
 
 from mathutils import Matrix, Quaternion, Vector
 
+from ..gmt_lib import *
 from ..structure.curve import Curve
-from .bone_props import GMTBoneProps
+from .bone_props import GMTBlenderBoneProps
 
 
 def transform_position_gmd_to_blender(pos: Vector) -> Vector:
@@ -46,19 +47,18 @@ def pattern_from_blender(pattern: List[int]) -> List[List[int]]:
     return [pattern, pattern[1:] + [pattern[-1]]]
 
 
-def convert_gmt_to_blender(curve: Curve):
-    if "rotation_quaternion" in curve.data_path:
-        curve.neutralize_rot()
-        return [rot_to_blender(v) for v in curve.values]
-    elif "location" in curve.data_path:
-        curve.neutralize_pos()
-        return [pos_to_blender(v) for v in curve.values]
-    elif "pat1" in curve.data_path:
-        return pattern_to_blender(curve.values)
-    return curve.values
+def convert_gmt_curve_to_blender(curve: GMTCurve):
+    curve.fill_channels()
+
+    if curve.type == GMTCurveType.LOCATION:
+        for kf in curve.keyframes:
+            kf.value = pos_to_blender(kf.value)
+    elif curve.type == GMTCurveType.ROTATION:
+        for kf in curve.keyframes:
+            kf.value = rot_to_blender(kf.value)
 
 
-def transform_location(bone_props: Dict[str, GMTBoneProps], bone_name: str, values: List[Vector]):
+def transform_location(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Vector]):
     prop = bone_props[bone_name]
     head = prop.head
     parent_head = bone_props.get(prop.parent_name)
@@ -81,7 +81,7 @@ def transform_location(bone_props: Dict[str, GMTBoneProps], bone_name: str, valu
     return values
 
 
-def transform_rotation(bone_props: Dict[str, GMTBoneProps], bone_name: str, values: List[Quaternion]):
+def transform_rotation(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Quaternion]):
     prop = bone_props[bone_name]
 
     loc = prop.loc

@@ -5,7 +5,7 @@ from bpy.types import EditBone
 from mathutils import Quaternion, Vector
 
 
-class GMTBoneProps:
+class GMTBlenderBoneProps:
     head: Vector
     loc: Vector
     rot: Quaternion
@@ -13,7 +13,7 @@ class GMTBoneProps:
     parent_name: str
 
 
-def get_edit_bones_props() -> Dict[str, GMTBoneProps]:
+def get_edit_bones_props() -> Dict[str, GMTBlenderBoneProps]:
     ao = bpy.context.active_object
     bpy.ops.object.mode_set(mode='EDIT')
 
@@ -23,11 +23,11 @@ def get_edit_bones_props() -> Dict[str, GMTBoneProps]:
     return bone_props
 
 
-def get_bones_props(edit_bones: List[EditBone]) -> Dict[str, GMTBoneProps]:
+def get_bones_props(edit_bones: List[EditBone]) -> Dict[str, GMTBlenderBoneProps]:
     bone_props = {}
 
     for b in edit_bones:
-        bp = GMTBoneProps()
+        bp = GMTBlenderBoneProps()
         bp.parent_name = b.parent.name if b.parent else ""
 
         if "head_no_rot" in b:

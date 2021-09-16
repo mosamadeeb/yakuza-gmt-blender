@@ -12,7 +12,7 @@ from ..structure.file import *
 from ..structure.version import GMTProperties
 from ..write import write_file
 from . import bone_props
-from .bone_props import GMTBoneProps, get_bones_props
+from .bone_props import GMTBlenderBoneProps, get_bones_props
 from .coordinate_converter import (pattern_from_blender, pos_from_blender,
                                    rot_from_blender)
 from .error import GMTError
@@ -167,7 +167,7 @@ class GMTExporter:
         self.gmt_file = GMTFile()
 
     armature: Armature
-    bone_props: Dict[str, GMTBoneProps]
+    bone_props: Dict[str, GMTBlenderBoneProps]
 
     def export(self):
         print(f"Exporting animation: {self.anm_name}")

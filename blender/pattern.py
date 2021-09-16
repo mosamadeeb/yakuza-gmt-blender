@@ -10,8 +10,8 @@ from ..structure.bone import find_bone
 from ..structure.curve import Curve, new_pos_curve, new_rot_curve
 from ..structure.types.format import get_curve_properties
 from ..yakuza_par_py.src import *
-from .bone_props import GMTBoneProps, get_edit_bones_props
-from .coordinate_converter import (convert_gmt_to_blender, transform_location,
+from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
+from .coordinate_converter import (transform_location,
                                    transform_rotation)
 from .error import GMTError
 from .pattern_lists import *
@@ -73,7 +73,7 @@ class PatternIndicesPanel(PatternBasePanel, Panel):
             box.label(text=text)
 
 
-def import_curve_from_pattern(c: Curve, action: Action, pattern_index: int, group_name: str, bone_props: Dict[str, GMTBoneProps], bone_name: str):
+def import_curve_from_pattern(c: Curve, action: Action, pattern_index: int, group_name: str, bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str):
     if not c.data_path:
         c.data_path = get_curve_properties(c.curve_format)
     if c.data_path == "":
