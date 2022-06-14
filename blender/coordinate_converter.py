@@ -3,7 +3,6 @@ from typing import Dict, List, Tuple
 from mathutils import Matrix, Quaternion, Vector
 
 from ..gmt_lib import *
-# from ..structure.curve import Curve
 from .bone_props import GMTBlenderBoneProps
 
 
@@ -61,6 +60,7 @@ def convert_gmt_curve_to_blender(curve: GMTCurve):
 def transform_location(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Vector]):
     prop = bone_props[bone_name]
     head = prop.head
+
     parent_head = bone_props.get(prop.parent_name)
     if parent_head:
         parent_head = parent_head.head
@@ -70,13 +70,17 @@ def transform_location(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: st
     loc = prop.loc
     rot = prop.rot
 
-    values = list(map(lambda x: (
+    pre_mat = (
         Matrix.Translation(loc).inverted()
         @ rot.to_matrix().to_4x4().inverted()
-        @ Matrix.Translation(x - head + parent_head)
-        @ rot.to_matrix().to_4x4()
+    )
+
+    post_mat = (
+        rot.to_matrix().to_4x4()
         @ Matrix.Translation(loc)
-    ).to_translation(), values))
+    )
+
+    values = list(map(lambda x: (pre_mat @ Matrix.Translation(x - head + parent_head) @ post_mat).to_translation(), values))
 
     return values
 
@@ -84,17 +88,45 @@ def transform_location(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: st
 def transform_rotation(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Quaternion]):
     prop = bone_props[bone_name]
 
+    parent_rot = bone_props.get(prop.parent_name)
+    if parent_rot:
+        parent_rot = parent_rot.rot_local
+    else:
+        parent_rot = Quaternion()
+
     loc = prop.loc
     rot = prop.rot
     rot_local = prop.rot_local
 
-    values = list(map(lambda x: (
+    pre_mat = (
         Matrix.Translation(loc).inverted()
+        # @ parent_rot.to_matrix().to_4x4().inverted()
         @ rot.to_matrix().to_4x4().inverted()
-        @ rot_local.to_matrix().to_4x4().inverted()
-        @ x.to_matrix().to_4x4()
+        # @ rot_local.to_matrix().to_4x4().inverted()
+    )
+
+    post_mat = (
+        rot_local.to_matrix().to_4x4().inverted()
         @ rot.to_matrix().to_4x4()
+        @ parent_rot.to_matrix().to_4x4()
         @ Matrix.Translation(loc)
-    ).to_quaternion(), values))
+    )
+
+    values = list(map(lambda x: (pre_mat @ x.to_matrix().to_4x4() @ post_mat).to_quaternion(), values))
 
     return values
+
+
+# pre_mat = (Matrix.Identity(4)
+#     @ Matrix.Translation(loc).inverted()
+#     #@ rot_local.to_matrix().to_4x4().inverted()
+#     @ rot.to_matrix().to_4x4().inverted()
+# )
+
+# post_mat = (
+#     Matrix.Identity(4)
+#     #@ parent_rot.to_matrix().to_4x4()
+#     @ rot.to_matrix().to_4x4()
+#     @ rot_local.to_matrix().to_4x4().inverted()
+#     @ Matrix.Translation(loc)
+# )
