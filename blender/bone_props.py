@@ -13,8 +13,7 @@ class GMTBlenderBoneProps:
     parent_name: str
 
 
-def get_edit_bones_props() -> Dict[str, GMTBlenderBoneProps]:
-    ao = bpy.context.active_object
+def get_edit_bones_props(ao: bpy.types.Object) -> Dict[str, GMTBlenderBoneProps]:
     bpy.ops.object.mode_set(mode='EDIT')
 
     bone_props = get_bones_props(ao.data.edit_bones)

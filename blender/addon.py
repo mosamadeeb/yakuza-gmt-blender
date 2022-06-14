@@ -127,3 +127,7 @@ def unregister():
     # remove from the export / import menu
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+
+    # remove handlers
+    bpy.app.handlers.frame_change_pre.remove(change_interpolation)
+    bpy.app.handlers.frame_change_post.remove(apply_patterns)

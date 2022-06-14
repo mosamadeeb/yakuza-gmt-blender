@@ -10,8 +10,8 @@ from mathutils import Euler, Matrix, Quaternion, Vector
 from ..gmt_lib import *
 from ..read import read_gmt_file
 from ..read_cmt import *
-from ..structure.file import *
-from ..structure.types.format import get_curve_properties
+# from ..structure.file import *
+# from ..structure.types.format import get_curve_properties
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
 from .coordinate_converter import (convert_gmt_curve_to_blender,
                                    transform_location, transform_rotation)
@@ -59,7 +59,7 @@ class ImportGMT(Operator, ImportHelper):
     def execute(self, context):
         import time
 
-        arm = self.check_armature()
+        arm = self.check_armature(context)
         if arm is str:
             self.report({"ERROR"}, arm)
             return {'CANCELLED'}
@@ -67,12 +67,10 @@ class ImportGMT(Operator, ImportHelper):
         try:
             start_time = time.time()
             if self.filepath.endswith('.cmt'):
-                importer = CMTImporter(
-                    self.filepath, self.as_keywords(ignore=("filter_glob",)))
+                importer = CMTImporter(self.filepath, self.as_keywords(ignore=("filter_glob",)))
                 importer.read()
             else:
-                importer = GMTImporter(
-                    self.filepath, self.as_keywords(ignore=("filter_glob",)))
+                importer = GMTImporter(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
                 importer.read()
 
             elapsed_s = "{:.2f}s".format(time.time() - start_time)
@@ -84,9 +82,9 @@ class ImportGMT(Operator, ImportHelper):
             self.report({"ERROR"}, str(error))
         return {'CANCELLED'}
 
-    def check_armature(self):
+    def check_armature(self, context: bpy.context):
         # check the active object first
-        ao = bpy.context.active_object
+        ao = context.active_object
         if ao and ao.type == 'ARMATURE' and ao.data.bones[:]:
             return 0
 
@@ -95,7 +93,7 @@ class ImportGMT(Operator, ImportHelper):
         if ao:
             collection = ao.users_collection[0]
         else:
-            collection = bpy.context.view_layer.active_layer_collection
+            collection = context.view_layer.active_layer_collection
 
         meshObjects = [o for o in bpy.data.collections[collection.name].objects
                        if o.data in bpy.data.meshes[:] and o.find_armature()]
@@ -104,15 +102,16 @@ class ImportGMT(Operator, ImportHelper):
         if meshObjects:
             armature = armatures[0]
             if armature.data.bones[:]:
-                bpy.context.view_layer.objects.active = armature
+                context.view_layer.objects.active = armature
                 return 0
 
         return "No armature found to add animation to"
 
 
 class CMTImporter:
-    def __init__(self, filepath, import_settings: Dict):
+    def __init__(self, context: bpy.context, filepath, import_settings: Dict):
         self.filepath = filepath
+        self.context = context
 
     cmt_file: CMTFile
 
@@ -124,7 +123,7 @@ class CMTImporter:
         self.animate_camera()
 
     def animate_camera(self):
-        camera = bpy.context.scene.camera
+        camera = self.context.scene.camera
 
         if not camera.animation_data:
             camera.animation_data_create()
@@ -190,9 +189,9 @@ class CMTImporter:
                 "co", [x for co in zip(frames, foc_lengths) for x in co])
             angle.update()
 
-        bpy.context.scene.frame_start = 0
-        bpy.context.scene.frame_current = 0
-        bpy.context.scene.frame_end = frame_count
+        self.context.scene.frame_start = 0
+        self.context.scene.frame_current = 0
+        self.context.scene.frame_end = frame_count
 
     def get_cam_rotations(self, anm: CMTAnimation):
         rotations = []
@@ -288,8 +287,9 @@ class CMTImporter:
 
 
 class GMTImporter:
-    def __init__(self, filepath, import_settings: Dict):
+    def __init__(self, context: bpy.context, filepath, import_settings: Dict):
         self.filepath = filepath
+        self.context = context
         self.merge_vector_curves = import_settings.get('merge_vector_curves')
         self.is_auth = import_settings.get('is_auth')
 
@@ -303,7 +303,7 @@ class GMTImporter:
         #     raise GMTError(f'{e}')
 
     def make_actions(self):
-        ao = bpy.context.active_object
+        ao = self.context.active_object
 
         print(f'Importing file: {self.gmt.name}')
 
@@ -352,7 +352,7 @@ class GMTImporter:
             if self.merge_vector_curves:
                 merge_vector(bones.get('center_c_n'), bones.get('vector_c_n'), vector_version, self.is_auth)
 
-            bone_props = get_edit_bones_props()
+            bone_props = get_edit_bones_props(ao)
 
             for bone_name in bones:
                 group = action.groups.new(bone_name)
@@ -365,10 +365,10 @@ class GMTImporter:
         # if not pattern_action and bpy.context.preferences.addons["yakuza_gmt"].preferences.get("use_patterns"):
         #     pattern_action = make_pattern_action(vector_version)
 
-        bpy.context.scene.render.fps = frame_rate
-        bpy.context.scene.frame_start = 0
-        bpy.context.scene.frame_current = 0
-        bpy.context.scene.frame_end = end_frame
+        self.context.scene.render.fps = frame_rate
+        self.context.scene.frame_start = 0
+        self.context.scene.frame_current = 0
+        self.context.scene.frame_end = end_frame
 
 
 def merge_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMTVectorVersion, is_auth: bool):

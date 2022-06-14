@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple
 from mathutils import Matrix, Quaternion, Vector
 
 from ..gmt_lib import *
-from ..structure.curve import Curve
+# from ..structure.curve import Curve
 from .bone_props import GMTBlenderBoneProps
 
 
