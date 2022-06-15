@@ -87,7 +87,7 @@ class ImportGMT(Operator, ImportHelper):
 
             start_time = time.time()
             if self.filepath.endswith('.cmt'):
-                importer = CMTImporter(self.filepath, self.as_keywords(ignore=("filter_glob",)))
+                importer = CMTImporter(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
                 importer.read()
             else:
                 importer = GMTImporter(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
