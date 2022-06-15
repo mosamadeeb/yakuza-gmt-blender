@@ -27,34 +27,41 @@ class ExportGMT(Operator, ExportHelper):
 
     filename_ext = '.gmt'
 
-    def anm_callback(self, context):
+    def anm_callback(self, context: bpy.context):
         items = []
 
         anm_name = ""
-        ao = bpy.context.active_object
+        ao = context.active_object
         if ao and ao.animation_data:
-            # add the selected action first so that it's the default value
+            # Add the selected action first so that it's the default value
             selected_anm = ao.animation_data.action
             if selected_anm:
                 anm_name = selected_anm.name
-                items = [(anm_name, anm_name, "")]
+                items.append((anm_name, anm_name, ""))
 
         for a in [act for act in bpy.data.actions if act.name != anm_name]:
             items.append((a.name, a.name, ""))
         return items
 
-    def skeleton_callback(self, context):
+    def armature_callback(self, context):
         items = []
-        for a in bpy.data.armatures:
+        ao = context.active_object
+        ao_name = ao.name
+
+        if ao and ao.type == 'ARMATURE':
+            # Add the selected armature first so that it's the default value
+            items.append((ao_name, ao_name, ""))
+
+        for a in [arm for arm in bpy.data.objects if arm.type == 'ARMATURE' and arm.name != ao_name]:
             items.append((a.name, a.name, ""))
         return items
 
     def anm_update(self, context):
         name = self.anm_name
-        if "(" in name and ")" in name:
+        if '[' in name and ']' in name:
             # used to avoid suffixes (e.g ".001")
-            self.gmt_file_name = name[name.index("(")+1:name.index(")")]
-            self.gmt_anm_name = name[:name.index("(")]
+            self.gmt_file_name = name[name.index('[')+1:name.index(']')]
+            self.gmt_anm_name = name[:name.index('[')]
 
     anm_name: EnumProperty(
         items=anm_callback,
@@ -62,9 +69,9 @@ class ExportGMT(Operator, ExportHelper):
         description="The action to be exported",
         update=anm_update)
 
-    skeleton_name: EnumProperty(
-        items=skeleton_callback,
-        name="Skeleton",
+    armature_name: EnumProperty(
+        items=armature_callback,
+        name="Armature",
         description="The armature used for the action")
 
     gmt_properties: EnumProperty(
@@ -94,7 +101,7 @@ class ExportGMT(Operator, ExportHelper):
         layout.use_property_decorate = True  # No animation.
 
         layout.prop(self, 'anm_name')
-        layout.prop(self, 'skeleton_name')
+        layout.prop(self, 'armature_name')
         layout.prop(self, 'gmt_properties')
         layout.prop(self, 'gmt_file_name')
         layout.prop(self, 'gmt_anm_name')
@@ -104,15 +111,20 @@ class ExportGMT(Operator, ExportHelper):
             self.anm_update(context)
 
     def execute(self, context):
-        arm = self.check_armature()
-        if arm is str:
-            self.report({"ERROR"}, arm)
-            return {'CANCELLED'}
+        import time
 
         try:
+            arm = self.check_armature(context)
+            if isinstance(arm, str):
+                raise GMTError(arm)
+
+            start_time = time.time()
             exporter = GMTExporter(
                 self.filepath, self.as_keywords(ignore=("filter_glob",)))
             exporter.export()
+
+            elapsed_s = "{:.2f}s".format(time.time() - start_time)
+            print("GMT export finished in " + elapsed_s)
 
             self.report({"INFO"}, f"Finished exporting {exporter.anm_name}")
             return {'FINISHED'}
@@ -121,9 +133,15 @@ class ExportGMT(Operator, ExportHelper):
             self.report({"ERROR"}, str(error))
         return {'CANCELLED'}
 
-    def check_armature(self):
+    def check_armature(self, context: bpy.context):
+        if self.armature_name:
+            armature = bpy.data.objects.get(self.armature_name)
+            if armature:
+                context.view_layer.objects.active = armature
+                return 0
+
         # check the active object first
-        ao = bpy.context.active_object
+        ao = context.active_object
         if ao and ao.type == 'ARMATURE' and ao.data.bones[:]:
             return 0
 
@@ -132,17 +150,18 @@ class ExportGMT(Operator, ExportHelper):
         if ao:
             collection = ao.users_collection[0]
         else:
-            collection = bpy.context.view_layer.active_layer_collection
+            collection = context.view_layer.active_layer_collection
 
-        meshObjects = [o for o in bpy.data.collections[collection.name].objects
-                       if o.data in bpy.data.meshes[:] and o.find_armature()]
+        if collection and collection.name != 'Master Collection':
+            meshObjects = [o for o in bpy.data.collections[collection.name].objects
+                           if o.data in bpy.data.meshes[:] and o.find_armature()]
 
-        armatures = [a.find_armature() for a in meshObjects]
-        if meshObjects:
-            armature = armatures[0]
-            if armature.data.bones[:]:
-                bpy.context.view_layer.objects.active = armature
-                return 0
+            armatures = [a.find_armature() for a in meshObjects]
+            if meshObjects:
+                armature = armatures[0]
+                if armature.data.bones[:]:
+                    context.view_layer.objects.active = armature
+                    return 0
 
         return "No armature found to get animation from"
 
