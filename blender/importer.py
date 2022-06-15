@@ -105,6 +105,8 @@ class ImportGMT(Operator, ImportHelper):
         return {'CANCELLED'}
 
     def check_armature(self, context: bpy.context):
+        """Sets the active object to be the armature chosen by the user"""
+
         if self.armature_name:
             armature = bpy.data.objects.get(self.armature_name)
             if armature:
