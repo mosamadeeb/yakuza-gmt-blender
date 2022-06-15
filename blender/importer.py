@@ -1,4 +1,5 @@
 from math import tan
+from os.path import basename
 from typing import Dict, List, Tuple
 
 import bpy
@@ -27,6 +28,25 @@ class ImportGMT(Operator, ImportHelper):
 
     filter_glob: StringProperty(default="*.gmt;*.cmt", options={"HIDDEN"})
 
+    def armature_callback(self, context):
+        items = []
+        ao = context.active_object
+        ao_name = ao.name
+
+        if ao and ao.type == 'ARMATURE':
+            # Add the selected armature first so that it's the default value
+            items.append((ao_name, ao_name, ""))
+
+        for a in [arm for arm in bpy.data.objects if arm.type == 'ARMATURE' and arm.name != ao_name]:
+            items.append((a.name, a.name, ""))
+        return items
+
+    armature_name: EnumProperty(
+        items=armature_callback,
+        name="Target Armature",
+        description="The armature to import for the action"
+    )
+
     merge_vector_curves: BoolProperty(
         name='Merge Vector',
         description='Merges vector_c_n animation into center_c_n, to allow for easier editing/previewing.\n'
@@ -50,6 +70,7 @@ class ImportGMT(Operator, ImportHelper):
         layout.use_property_split = True
         layout.use_property_decorate = True  # No animation.
 
+        layout.prop(self, 'armature_name')
         layout.prop(self, 'merge_vector_curves')
 
         is_auth_row = layout.row()
@@ -59,12 +80,11 @@ class ImportGMT(Operator, ImportHelper):
     def execute(self, context):
         import time
 
-        arm = self.check_armature(context)
-        if arm is str:
-            self.report({"ERROR"}, arm)
-            return {'CANCELLED'}
-
         try:
+            arm = self.check_armature(context)
+            if isinstance(arm, str):
+                raise GMTError(arm)
+
             start_time = time.time()
             if self.filepath.endswith('.cmt'):
                 importer = CMTImporter(self.filepath, self.as_keywords(ignore=("filter_glob",)))
@@ -76,13 +96,21 @@ class ImportGMT(Operator, ImportHelper):
             elapsed_s = "{:.2f}s".format(time.time() - start_time)
             print("GMT import finished in " + elapsed_s)
 
+            self.report({"INFO"}, f"Finished importing {basename(self.filepath)}")
             return {'FINISHED'}
         except GMTError as error:
             print("Catching Error")
             self.report({"ERROR"}, str(error))
+
         return {'CANCELLED'}
 
     def check_armature(self, context: bpy.context):
+        if self.armature_name:
+            armature = bpy.data.objects.get(self.armature_name)
+            if armature:
+                context.view_layer.objects.active = armature
+                return 0
+
         # check the active object first
         ao = context.active_object
         if ao and ao.type == 'ARMATURE' and ao.data.bones[:]:
@@ -95,15 +123,16 @@ class ImportGMT(Operator, ImportHelper):
         else:
             collection = context.view_layer.active_layer_collection
 
-        meshObjects = [o for o in bpy.data.collections[collection.name].objects
-                       if o.data in bpy.data.meshes[:] and o.find_armature()]
+        if collection and collection.name != 'Master Collection':
+            meshObjects = [o for o in bpy.data.collections[collection.name].objects
+                           if o.data in bpy.data.meshes[:] and o.find_armature()]
 
-        armatures = [a.find_armature() for a in meshObjects]
-        if meshObjects:
-            armature = armatures[0]
-            if armature.data.bones[:]:
-                context.view_layer.objects.active = armature
-                return 0
+            armatures = [a.find_armature() for a in meshObjects]
+            if meshObjects:
+                armature = armatures[0]
+                if armature.data.bones[:]:
+                    context.view_layer.objects.active = armature
+                    return 0
 
         return "No armature found to add animation to"
 
