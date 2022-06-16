@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Dict, Tuple
 
 import bpy
@@ -92,7 +93,8 @@ class ExportGMT(Operator, ExportHelper):
 
     split_vector_curves: BoolProperty(
         name='Split Vector',
-        description='Splits vector_c_n animation from center_c_n, to more closely match game behavior.\n'
+        description='Splits vector_c_n animation from center_c_n, to more closely match game behavior. '
+                    'Will clear existing vector_c_n animation from the action.\n'
                     'Does not affect Y3-5 animations',
         default=True
     )
@@ -252,58 +254,11 @@ class GMTExporter:
         for group in action.groups.values():
             anm.bones[group.name] = self.make_bone(group.name, group.channels)
 
-            # if group.name != "vector_c_n":
-            #     anm.bones.append(self.make_bone(group.name, group.channels))
-            # else:
-            #     center, c_index = find_bone("center_c_n", anm.bones)
-
-            #     if not len(center.curves):
-            #         center_channels = [
-            #             c for c in group.channels if "gmt_" in c.data_path]
-
-            #         # Use vector head (0) because we already added center head once
-            #         center = self.make_bone(group.name, center_channels)
-            #         center.name = Name("center_c_n")
-
-            #         if c_index != -1:
-            #             anm.bones[c_index] = center
-            #         else:
-            #             anm.bones.insert(0, center)
-
-            #     vector = self.make_bone(
-            #         group.name, [c for c in group.channels if "gmt_" not in c.data_path])
-            #     anm.bones.append(vector)
-
-            #     if self.gmt_properties.is_dragon_engine:
-            #         if not len(center.curves):
-            #             center.curves = [new_pos_curve(), new_rot_curve()]
-            #     else:
-            #         vector_curves = deepcopy(vector.curves)
-            #         for c in vector.curves:
-            #             c = c.to_horizontal()
-
-            #         vertical = new_pos_curve()
-            #         if len(center.position_curves()):
-            #             vertical = center.position_curves()[0].to_vertical()
-
-            #         center.curves = vector_curves
-            #         for c in center.curves:
-            #             if 'POS' in c.curve_format.name:
-            #                 c = add_curve(c, vertical)
-
-            #         # TODO: Move this to the converter once it's implemented
-            #         # Add scale bone to mark this gmt as non DE
-            #         scale = Bone()
-            #         scale.name = Name("scale")
-            #         scale.curves = [new_pos_curve(), new_rot_curve()]
-            #         anm.bones.insert(0, scale)
-
         # Try splitting vector from center
         if self.split_vector_curves and self.gmt_game in ['ISHIN', 'DE']:
-            split_vector(anm.bones.get('center_c_n'), anm.bones.get('vector_c_n'),
-                         GMTVectorVersion.DRAGON_VECTOR if self.gmt_game == 'DE' else GMTVectorVersion.OLD_VECTOR, self.is_auth)
+            split_vector(anm.bones.get('center_c_n'), anm.bones.get('vector_c_n'), GMTVectorVersion.DRAGON_VECTOR if (
+                self.gmt_game == 'DE') else GMTVectorVersion.OLD_VECTOR, self.is_auth)
 
-        # self.gmt_file.animations = [anm]
         return anm
 
     def make_bone(self, bone_name: str, channels: List[FCurve]) -> GMTBone:
@@ -587,14 +542,41 @@ def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
     if vector_version == GMTVectorVersion.NO_VECTOR or not (center_bone and vector_bone):
         return
 
-    # if (vector_version == GMTVectorVersion.OLD_VECTOR and not is_auth) or vector_version == GMTVectorVersion.DRAGON_VECTOR:
-    #     # Both curves' values should be applied, so add vector to center
-    #     add_curve(center_bone.location, vector_bone.location)
-    #     add_curve(center_bone.rotation, vector_bone.rotation)
+    # in GMT coordinate system:
+    # OLD_VECTOR and is_auth -> vector should copy X and Z of center, and have a 0 Y channel
+    # OLD_VECTOR and not is_auth -> vector should be used for X and Z of center, center should have Y only
+    # DRAGON_VECTOR -> vector should be used instead of center, center should be empty
+    # Rotation should be copied to vector in all cases, and should be removed from center in all cases except (OLD_VECTOR and is_auth)
 
-    # # Reset vector's curves to avoid confusion, since it won't be used anymore
-    # vector_bone.location = GMTCurve(GMTCurveType.LOCATION)
-    # vector_bone.rotation = GMTCurve(GMTCurveType.ROTATION)
+    vector_bone.location = deepcopy(center_bone.location)
+    vector_bone.rotation = deepcopy(center_bone.rotation)
+
+    if vector_version == GMTVectorVersion.OLD_VECTOR:
+        # Clear Y channel in vector location
+        if vector_bone.location.channel == GMTCurveChannel.ALL:
+            for kf in vector_bone.location.keyframes:
+                kf.value = (kf.value[0], 0.0, kf.value[2])
+
+        elif vector_bone.location.channel == GMTCurveChannel.Y:
+            vector_bone.location.keyframes.clear()
+            vector_bone.location.keyframes.append(GMTKeyframe(0, (0.0)))
+
+        if not is_auth:
+            # Clear X and Z channels in center location
+            if center_bone.location.channel == GMTCurveChannel.ALL:
+                for kf in center_bone.location.keyframes:
+                    kf.value = (0.0, kf.value[1], 0.0)
+
+            elif center_bone.location.channel == GMTCurveChannel.X or center_bone.location.channel == GMTCurveChannel.Z:
+                center_bone.location.keyframes.clear()
+                center_bone.location.keyframes.append(GMTKeyframe(0, (0.0)))
+
+            # Clear center rotation
+            center_bone.rotation = GMTCurve.new_rotation_curve()
+
+    elif vector_version == GMTVectorVersion.DRAGON_VECTOR:
+        center_bone.location = GMTCurve.new_location_curve()
+        center_bone.rotation = GMTCurve.new_rotation_curve()
 
 
 def menu_func_export(self, context):

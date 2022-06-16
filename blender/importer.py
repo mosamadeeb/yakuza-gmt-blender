@@ -229,6 +229,8 @@ class CMTImporter:
         for data in anm.anm_data:
             pos = Vector((data.pos_x, data.pos_y, data.pos_z))
             foc = Vector((data.foc_x, data.foc_y, data.foc_z))
+
+            # Yes, i'm leaving this c++ code here until the CMT importer is 100% functional
             """
             public static Quaternion LookAt(Vector3 sourcePoint, Vector3 destPoint)
             {
@@ -416,8 +418,10 @@ def merge_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
         add_curve(center_bone.rotation, vector_bone.rotation)
 
     # Reset vector's curves to avoid confusion, since it won't be used anymore
-    vector_bone.location = GMTCurve(GMTCurveType.LOCATION)
-    vector_bone.rotation = GMTCurve(GMTCurveType.ROTATION)
+    vector_bone.location = GMTCurve.new_location_curve()
+    vector_bone.rotation = GMTCurve.new_rotation_curve()
+    convert_gmt_curve_to_blender(vector_bone.location)
+    convert_gmt_curve_to_blender(vector_bone.rotation)
 
 
 def add_curve(curve: GMTCurve, other: GMTCurve):
