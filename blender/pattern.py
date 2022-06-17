@@ -4,15 +4,14 @@ import bpy
 from bpy.types import Action, ActionGroup, FCurve, Panel, Preferences
 from mathutils import Quaternion, Vector
 
-from ..read import read_gmt_file_from_data
+# from ..read import read_gmt_file_from_data
+# from ..structure.bone import find_bone
+# from ..structure.curve import Curve, new_pos_curve, new_rot_curve
+# from ..structure.types.format import get_curve_properties
 from ..read_gmd import read_gmd_bones_from_data
-from ..structure.bone import find_bone
-from ..structure.curve import Curve, new_pos_curve, new_rot_curve
-from ..structure.types.format import get_curve_properties
 from ..yakuza_par_py.src import *
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
-from .coordinate_converter import (transform_location,
-                                   transform_rotation)
+from .coordinate_converter import transform_location, transform_rotation
 from .error import GMTError
 from .pattern_lists import *
 
@@ -73,6 +72,9 @@ class GMTPatternIndicesPanel(GMTPatternBasePanel, Panel):
             box.label(text=text)
 
 
+# File content beyond this point is outdated and unused
+
+"""
 def import_curve_from_pattern(c: Curve, action: Action, pattern_index: int, group_name: str, bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str):
     if not c.data_path:
         c.data_path = get_curve_properties(c.curve_format)
@@ -302,3 +304,4 @@ def apply_patterns(scene):
                 bone.location = evaluate_location(p1, p2, f, group.channels)
                 bone.rotation_quaternion = evaluate_rotation_quaternion(
                     p1, p2, f, group.channels)
+"""

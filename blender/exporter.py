@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
@@ -8,7 +8,6 @@ from bpy_extras.io_utils import ExportHelper
 from mathutils import Matrix, Quaternion, Vector
 
 from ..gmt_lib import *
-from ..read_cmt import *
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
 from .coordinate_converter import (pattern1_from_blender,
                                    pattern2_from_blender, pos_from_blender,

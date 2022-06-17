@@ -1,7 +1,7 @@
-from typing import List
 from os.path import realpath
+from typing import List
 
-from .util.binary import BinaryReader
+from .gmt_lib.gmt.util.binary_reader.binary_reader import BinaryReader, Whence
 
 
 class GMDBone:
@@ -37,9 +37,11 @@ class GMDBone:
                             re_bones_new.append(c)
                 re_bones = re_bones_new
 
+
 def read_gmd_bones(path: str) -> List[GMDBone]:
     with open(realpath(path), "rb") as f:
         return read_gmd_bones_from_data(f.read())
+
 
 def read_gmd_bones_from_data(data: bytearray) -> List[GMDBone]:
     gmd = BinaryReader(data)
@@ -48,7 +50,7 @@ def read_gmd_bones_from_data(data: bytearray) -> List[GMDBone]:
         print("Invalid GMD magic!")
         return []
 
-    gmd.skip(1)
+    gmd.seek(1, Whence.CUR)
 
     gmd.set_endian(bool(gmd.read_uint8()))
 
@@ -67,13 +69,13 @@ def read_gmd_bones_from_data(data: bytearray) -> List[GMDBone]:
 
         gmd.seek(bone_offset + (0x80 * b))
 
-        gmd.skip(0x4)
+        gmd.seek(0x4, Whence.CUR)
         bone.child = gmd.read_int32()
         bone.sibling = gmd.read_int32()
-        gmd.skip(0xC)
+        gmd.seek(0xC, Whence.CUR)
         name_index = gmd.read_int32()
 
-        gmd.skip(4)
+        gmd.seek(4, Whence.CUR)
         bone.local_pos = gmd.read_float(4)
         bone.local_rot = gmd.read_float(4)
         bone.local_scale = gmd.read_float(4)

@@ -5,7 +5,9 @@ from bpy.types import AddonPreferences
 
 from .exporter import ExportGMT, menu_func_export
 from .importer import ImportGMT, create_pose_bone_type, menu_func_import
-from .pattern import GMTPatternIndicesPanel, GMTPatternPanel, apply_patterns
+from .pattern import GMTPatternIndicesPanel, GMTPatternPanel
+
+# from .pattern import apply_patterns
 
 
 class GMTPatternPreferences(AddonPreferences):

@@ -9,7 +9,7 @@ from bpy_extras.io_utils import ImportHelper
 from mathutils import Euler, Quaternion, Vector
 
 from ..gmt_lib import *
-from ..read_cmt import *
+from ..read_cmt import CMTAnimation, CMTData, CMTFile, read_cmt_file
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
 from .coordinate_converter import (convert_gmt_curve_to_blender,
                                    pattern1_to_blender, pattern2_to_blender,
@@ -560,7 +560,8 @@ def get_data_path_from_curve_type(context: bpy.context, curve_type: GMTCurveType
         # Both PATTERN_UNK and PATTERN_FACE use the same format, so just make the difference here
         pat_num = 2 if GMTCurveType.PATTERN_UNK else 3
 
-        pat_tuple = (-128, 127, 0, f'pat{pat_num}_unk_{channel}', f'Pat{pat_num} Unk {channel}', "Unknown pattern property")
+        pat_tuple = (-128, 127, 0, f'pat{pat_num}_unk_{channel}',
+                     f'Pat{pat_num} Unk {channel}', "Unknown pattern property")
         pat_string = '|'.join(map(lambda x: str(x), pat_tuple))
 
         return create_pose_bone_type(context, pat_string)

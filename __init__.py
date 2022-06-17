@@ -6,12 +6,13 @@ blender_loader = importlib.util.find_spec('bpy')
 bl_info = {
     "name": "Yakuza GMT File Import/Export",
     "author": "SutandoTsukai181",
-    "version": (0, 1, 0),
-    "blender": (2, 80, 0),
+    "version": (0, 9, 0),
+    "blender": (2, 93, 0),
     "location": "File > Import-Export",
     "description": "Import-Export Yakuza GMT Files",
     "warning": "",
-    "doc_url": "",
+    "doc_url": "https://github.com/SutandoTsukai181/yakuza-gmt-blender/wiki",
+    "tracker_url": "https://github.com/SutandoTsukai181/yakuza-gmt-blender/issues",
     "category": "Import-Export",
 }
 

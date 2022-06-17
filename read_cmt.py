@@ -1,7 +1,7 @@
 from os.path import basename
 from typing import List
 
-from .util.binary import BinaryReader
+from .gmt_lib.gmt.util.binary_reader.binary_reader import BinaryReader, Whence
 
 
 class CMTData:
@@ -52,10 +52,10 @@ class CMTFile:
 def read_header(cmt: BinaryReader) -> CMTHeader:
     header = CMTHeader()
 
-    cmt.skip(1)
+    cmt.seek(1, Whence.CUR)
     header.big_endian = bool(cmt.read_uint8())
     cmt.set_endian(header.big_endian)
-    cmt.skip(2)
+    cmt.seek(2, Whence.CUR)
     header.version = cmt.read_uint32()
     header.data_size = cmt.read_uint32()
 
