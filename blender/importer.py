@@ -399,10 +399,10 @@ class GMTImporter:
         # if not pattern_action and bpy.context.preferences.addons["yakuza_gmt"].preferences.get("use_patterns"):
         #     pattern_action = make_pattern_action(vector_version)
 
-        self.context.scene.render.fps = frame_rate
+        self.context.scene.render.fps = int(frame_rate)
         self.context.scene.frame_start = 0
         self.context.scene.frame_current = 0
-        self.context.scene.frame_end = end_frame
+        self.context.scene.frame_end = int(end_frame)
 
 
 def merge_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMTVectorVersion, is_auth: bool):
