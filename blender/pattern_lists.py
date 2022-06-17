@@ -1,6 +1,6 @@
 
 HAND_PATTERN = [
-    ("NONE", "None", "", -1),
+    ("NONE", "Disabled", "", -1),
     ("NEUTRAL", "Neutral", "", 0),
     ("GU", "Gu", "", 1),
     ("KATANA", "Katana", "", 2),
@@ -22,7 +22,7 @@ HAND_PATTERN = [
 ]
 
 HAND_PATTERN_DE = [
-    ("NONE", "None", "", -1),
+    ("NONE", "Disabled", "", -1),
     ("NEUTRAL", "Neutral", "", 0),
     ("GU", "Gu", "", 1),
     ("KATANA", "Katana", "", 2),

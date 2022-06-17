@@ -17,7 +17,7 @@ from .error import GMTError
 from .pattern_lists import *
 
 
-class PatternBasePanel:
+class GMTPatternBasePanel:
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "bone"
@@ -27,11 +27,11 @@ class PatternBasePanel:
         return context.object.type == 'ARMATURE' and context.active_pose_bone and "pattern" in context.active_pose_bone.name
 
 
-class PatternPanel(PatternBasePanel, Panel):
+class GMTPatternPanel(GMTPatternBasePanel, Panel):
     """Creates a Panel in the Object properties window"""
 
     bl_idname = "POSEBONE_PT_pattern"
-    bl_label = "Pattern Properties"
+    bl_label = "GMT Pattern Properties"
 
     def draw(self, context):
         layout = self.layout
@@ -41,10 +41,10 @@ class PatternPanel(PatternBasePanel, Panel):
         layout.prop(active_pose_bone, 'pat1_right_hand')
 
 
-class PatternIndicesPanel(PatternBasePanel, Panel):
+class GMTPatternIndicesPanel(GMTPatternBasePanel, Panel):
     bl_idname = "POSEBONE_PT_pattern_indices"
     bl_parent_id = "POSEBONE_PT_pattern"
-    bl_label = "Pattern Indices"
+    bl_label = "GMT Pattern Indices"
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):

@@ -5,7 +5,7 @@ from bpy.types import AddonPreferences
 
 from .exporter import ExportGMT, menu_func_export
 from .importer import ImportGMT, menu_func_import
-from .pattern import PatternIndicesPanel, PatternPanel, apply_patterns
+from .pattern import GMTPatternIndicesPanel, GMTPatternPanel, apply_patterns
 
 
 class GMTPatternPreferences(AddonPreferences):
@@ -65,8 +65,8 @@ Yakuza 7 par contains more patterns than Yakuza 6/Kiwami 2/Judgment par""",
 classes = (
     ImportGMT,
     ExportGMT,
-    PatternPanel,
-    PatternIndicesPanel,
+    GMTPatternPanel,
+    GMTPatternIndicesPanel,
     GMTPatternPreferences,
 )
 
