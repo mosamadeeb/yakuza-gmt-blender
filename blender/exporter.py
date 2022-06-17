@@ -10,7 +10,8 @@ from mathutils import Matrix, Quaternion, Vector
 from ..gmt_lib import *
 from ..read_cmt import *
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
-from .coordinate_converter import (pattern_from_blender, pos_from_blender,
+from .coordinate_converter import (pattern1_from_blender,
+                                   pattern2_from_blender, pos_from_blender,
                                    rot_from_blender)
 from .error import GMTError
 
@@ -265,43 +266,46 @@ class GMTExporter:
         bone = GMTBone(bone_name)
 
         loc_len, rot_len = 0, 0
-        loc_curves, rot_curves, pat1_curves = dict(), dict(), dict()
+        loc_curves, rot_curves, pat1_curves, pat_other_curves = dict(), dict(), dict(), dict()
 
         for c in channels:
-            if "location" in c.data_path[c.data_path.rindex(".") + 1:]:
+            if 'location' in c.data_path[c.data_path.rindex('.') + 1:]:
                 if loc_len == 0:
                     loc_len = len(c.keyframe_points)
                 elif loc_len != len(c.keyframe_points):
                     # TODO: Add an option to fill channels (by default) when there are unmatching keyframes
-                    raise GMTError(f"FCurve {c.data_path} has channels with unmatching keyframes")
+                    raise GMTError(f'FCurve {c.data_path} has channels with unmatching keyframes')
 
                 if c.array_index == 0:
-                    loc_curves["x"] = c
+                    loc_curves['x'] = c
                 elif c.array_index == 1:
-                    loc_curves["y"] = c
+                    loc_curves['y'] = c
                 elif c.array_index == 2:
-                    loc_curves["z"] = c
+                    loc_curves['z'] = c
 
-            elif "rotation_quaternion" in c.data_path[c.data_path.rindex(".") + 1:]:
+            elif 'rotation_quaternion' in c.data_path[c.data_path.rindex('.') + 1:]:
                 if rot_len == 0:
                     rot_len = len(c.keyframe_points)
                 elif rot_len != len(c.keyframe_points):
-                    raise GMTError(f"FCurve {c.data_path} has channels with unmatching keyframes")
+                    raise GMTError(f'FCurve {c.data_path} has channels with unmatching keyframes')
 
                 if c.array_index == 0:
-                    rot_curves["w"] = c
+                    rot_curves['w'] = c
                 elif c.array_index == 1:
-                    rot_curves["x"] = c
+                    rot_curves['x'] = c
                 elif c.array_index == 2:
-                    rot_curves["y"] = c
+                    rot_curves['y'] = c
                 elif c.array_index == 3:
-                    rot_curves["z"] = c
+                    rot_curves['z'] = c
 
-            elif "pat1" in c.data_path:
-                if c.data_path[c.data_path.rindex(".") + 1:] == "pat1_left_hand":
-                    pat1_curves["left_" + str(c.array_index)] = c
-                elif c.data_path[c.data_path.rindex(".") + 1:] == "pat1_right_hand":
-                    pat1_curves["right_" + str(c.array_index)] = c
+            elif 'pat1' in c.data_path:
+                pat1_curves[c.data_path[c.data_path.rindex('.') + 1:]] = c
+
+            elif 'pat' in c.data_path:
+                pat_other_curves[c.data_path[c.data_path.rindex('.') + 1:]] = c
+
+            else:
+                pass
 
         # Location curves
         if len(loc_curves) == 3:
@@ -339,19 +343,41 @@ class GMTExporter:
         else:
             print(f'Warning: Invalid number of rotation channels for bone {bone_name} - skipping...')
 
-        # Patterns
+        # Patterns (hand)
         pattern_hand_curves = []
         for pat in pat1_curves:
             if 'left' in pat:
                 channel = GMTCurveChannel.LEFT_HAND
             elif 'right' in pat:
                 channel = GMTCurveChannel.RIGHT_HAND
+            else:
+                channel = GMTCurveChannel(int(pat.split('_')[-1]))
 
             pattern_hand_curves.append(self.make_curve(
                 [pat1_curves[pat]], GMTCurveType.PATTERN_HAND, channel, bone_name))
 
         if len(pattern_hand_curves):
             bone.patterns_hand = pattern_hand_curves
+
+        # Patterns (unk and face)
+        pattern_unk_curves = []
+        pattern_face_curves = []
+        for pat in pat_other_curves:
+            pat_type = GMTCurveType.PATTERN_UNK if ('pat2' in pat) else GMTCurveType.PATTERN_FACE
+            channel = GMTCurveChannel(int(pat.split('_')[-1]))
+
+            curve = self.make_curve([pat_other_curves[pat]], pat_type, channel, bone_name)
+
+            if pat_type == GMTCurveType.PATTERN_UNK:
+                pattern_unk_curves.append(curve)
+            else:
+                pattern_face_curves.append(curve)
+
+        if len(pattern_unk_curves):
+            bone.patterns_unk = pattern_unk_curves
+
+        if len(pattern_face_curves):
+            bone.patterns_face = pattern_face_curves
 
         return bone
 
@@ -367,13 +393,13 @@ class GMTExporter:
             channel_count = 3 if (channel == GMTCurveChannel.ALL) else 1
         elif curve_type == GMTCurveType.ROTATION:
             channel_count = 4 if (channel == GMTCurveChannel.ALL) else 2
-        elif curve_type == GMTCurveType.PATTERN_HAND:
+        elif curve_type in (GMTCurveType.PATTERN_HAND, GMTCurveType.PATTERN_UNK, GMTCurveType.PATTERN_FACE):
             channel_count = 1
 
         axes_co = []
         for i in range(channel_count):
             axis_co = [0] * 2 * len(fcurves[i].keyframe_points)
-            fcurves[i].keyframe_points.foreach_get("co", axis_co)
+            fcurves[i].keyframe_points.foreach_get('co', axis_co)
             axes_co.append(axis_co)
 
         keyframes = axes_co[0][::2]
@@ -456,7 +482,10 @@ class GMTExporter:
                     # Prevent pattern numbers larger than old engine max to be exported
                     converted_values = self.correct_pattern(converted_values)
 
-                converted_values = list(map(lambda s, e: [int(s), int(e)], *pattern_from_blender(converted_values)))
+                converted_values = list(map(lambda s, e: [int(s), int(e)], *pattern1_from_blender(converted_values)))
+        elif curve_type in (GMTCurveType.PATTERN_UNK, GMTCurveType.PATTERN_FACE):
+            if channel_count == 1:
+                converted_values = list(map(lambda v: [int(v)], pattern2_from_blender(channel_values[0])))
 
         # Assign the values
         for kf, val in zip(curve.keyframes, converted_values):

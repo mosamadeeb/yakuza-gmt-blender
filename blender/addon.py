@@ -4,7 +4,7 @@ from bpy.props import BoolProperty, StringProperty
 from bpy.types import AddonPreferences
 
 from .exporter import ExportGMT, menu_func_export
-from .importer import ImportGMT, menu_func_import
+from .importer import ImportGMT, create_pose_bone_type, menu_func_import
 from .pattern import GMTPatternIndicesPanel, GMTPatternPanel, apply_patterns
 
 
@@ -62,72 +62,99 @@ Yakuza 7 par contains more patterns than Yakuza 6/Kiwami 2/Judgment par""",
         layout.prop(self, "dragon_bone_par")
 
 
+# Used for storing strings inside a collection property
+class StringPropertyGroup(bpy.types.PropertyGroup):
+    string: bpy.props.StringProperty()
+
+
 classes = (
     ImportGMT,
     ExportGMT,
     GMTPatternPanel,
     GMTPatternIndicesPanel,
-    GMTPatternPreferences,
+    StringPropertyGroup,
+    # GMTPatternPreferences,
 )
 
 
 @persistent
+# Currently unused, since pattern previewing is disabled
 def change_interpolation(scene):
     if bpy.context.active_object and bpy.context.active_object.animation_data:
         for f in bpy.context.active_object.animation_data.action.fcurves:
-            if "pat1" in f.data_path:
+            if 'pat' in f.data_path:
                 for k in f.keyframe_points:
                     k.interpolation = 'CONSTANT'
+
+
+@persistent
+def load_pattern_types(dummy):
+    if not hasattr(bpy.context.scene, 'pattern_types'):
+        print('GMTWarning: Addon did not register correctly - missing collection property in scene')
+        return
+
+    global types
+
+    # Load collection from scene
+    for pat in getattr(bpy.context.scene, 'pattern_types'):
+        types[create_pose_bone_type(bpy.context, pat.string)] = bpy.types.PoseBone
 
 
 def register():
     for c in classes:
         bpy.utils.register_class(c)
 
-    # add to the export / import menu
+    # Add to the export / import menu
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 
-    # add new pattern attributes
-    desc = """Sets interpolation states for hand pattern animations.
+    # Store a collection in the scene to save new pattern types created while importing
+    setattr(bpy.types.Scene, 'pattern_types', bpy.props.CollectionProperty(type=StringPropertyGroup))
+
+    pat_desc = """Sets interpolation states for hand pattern animations.
 The animation will be interpolated from the current keyframe's state to the next keyframe's state"""
 
-    bpy.types.PoseBone.pat1_left_hand = bpy.props.IntProperty(
-        name="Left Hand", min=-1, max=25, description=desc, default=-1)
-    bpy.types.PoseBone.pat1_right_hand = bpy.props.IntProperty(
-        name="Right Hand", min=-1, max=25, description=desc, default=-1)
-
-    # add another set of location and rotation attributes so we can store FCurves when a driver is active
-    desc_gmt = "Stores GMT FCurves when a driver is enabled"
-    bpy.types.PoseBone.gmt_location = bpy.props.FloatVectorProperty(
-        name="GMT Location", size=3, subtype="XYZ", description=desc_gmt)
-    bpy.types.PoseBone.gmt_rotation_quaternion = bpy.props.FloatVectorProperty(
-        name="GMT Quaternion Rotation", size=4, subtype="QUATERNION", description=desc_gmt)
+    # Add new pattern attributes
+    setattr(bpy.types.PoseBone, 'pat1_left_hand', bpy.props.IntProperty(
+        name='Left Hand', min=-1, max=25, description=pat_desc, default=-1))
+    setattr(bpy.types.PoseBone, 'pat1_right_hand', bpy.props.IntProperty(
+        name='Right Hand', min=-1, max=25, description=pat_desc, default=-1))
 
     global types
-    types = (
-        bpy.types.PoseBone.pat1_left_hand,
-        bpy.types.PoseBone.pat1_right_hand,
-        bpy.types.PoseBone.gmt_location,
-        bpy.types.PoseBone.gmt_rotation_quaternion,
-    )
+    types = {
+        'pattern_types': bpy.types.Scene,
+        'pat1_left_hand': bpy.types.PoseBone,
+        'pat1_right_hand': bpy.types.PoseBone,
+    }
 
-    # add a handler to change pattern curves interpolation to constant on each frame update
-    bpy.app.handlers.frame_change_pre.append(change_interpolation)
-    bpy.app.handlers.frame_change_post.append(apply_patterns)
+    # Add a handler to change pattern curves interpolation to constant on each frame update
+    # bpy.app.handlers.frame_change_pre.append(change_interpolation)
+    # bpy.app.handlers.frame_change_post.append(apply_patterns)
+
+    # Add a handler to load pattern types created while importing (from a previous session)
+    bpy.app.handlers.load_post.append(load_pattern_types)
 
 
 def unregister():
-    for c in classes:
-        bpy.utils.unregister_class(c)
-
-    for t in types:
-        del t
-
-    # remove from the export / import menu
+    # Remove from the export / import menu
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
 
-    # remove handlers
-    bpy.app.handlers.frame_change_pre.remove(change_interpolation)
-    bpy.app.handlers.frame_change_post.remove(apply_patterns)
+    # Remove handlers
+    bpy.app.handlers.load_post.remove(load_pattern_types)
+    # bpy.app.handlers.frame_change_pre.remove(change_interpolation)
+    # bpy.app.handlers.frame_change_post.remove(apply_patterns)
+
+    # HACK: Instead of trying to update the types dict from the importer, we just add all the types
+    # that were created (from the scene pattern_types collection) to the list in order to delete them
+    # Shouldn't cause any issues...
+    load_pattern_types(None)
+
+    global types
+    for attr in reversed(types):
+        delattr(types[attr], attr)
+
+    types.clear()
+
+    for c in reversed(classes):
+        bpy.utils.unregister_class(c)

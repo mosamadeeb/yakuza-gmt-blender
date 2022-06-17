@@ -1,24 +1,23 @@
 from math import tan
 from os.path import basename
-from typing import Dict, List, Tuple
+from typing import Dict
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
-from bpy.types import Action, Operator, PoseBone
+from bpy.types import Action, Operator
 from bpy_extras.io_utils import ImportHelper
-from mathutils import Euler, Matrix, Quaternion, Vector
+from mathutils import Euler, Quaternion, Vector
 
 from ..gmt_lib import *
-from ..read import read_gmt_file
 from ..read_cmt import *
-# from ..structure.file import *
-# from ..structure.types.format import get_curve_properties
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
 from .coordinate_converter import (convert_gmt_curve_to_blender,
+                                   pattern1_to_blender, pattern2_to_blender,
                                    transform_location, transform_rotation)
 from .error import GMTError
-from .pattern import make_pattern_action
-from .pattern_lists import VERSION_STR
+
+# from .pattern import make_pattern_action
+# from .pattern_lists import VERSION_STR
 
 
 class ImportGMT(Operator, ImportHelper):
@@ -392,8 +391,10 @@ class GMTImporter:
                 print(f'Importing ActionGroup: {group.name}')
 
                 for curve in bones[bone_name].curves:
-                    import_curve(curve, bone_name, action, group.name, bone_props)
+                    import_curve(self.context, curve, bone_name, action, group.name, bone_props)
 
+        # If pattern previewing is to be enabled later, this should be moved to the addon register function instead
+        # Although that may require bone.par path in order to import the patterns with the basic skeleton GMDs
         # pattern_action = bpy.data.actions.get(f"GMT_Pattern{VERSION_STR[vector_version]}")
         # if not pattern_action and bpy.context.preferences.addons["yakuza_gmt"].preferences.get("use_patterns"):
         #     pattern_action = make_pattern_action(vector_version)
@@ -488,14 +489,16 @@ def add_curve(curve: GMTCurve, other: GMTCurve):
     curve.keyframes = result
 
 
-def import_curve(curve: GMTCurve, bone_name: str, action: Action, group_name: str, bone_props: Dict[str, GMTBlenderBoneProps]):
-    data_path = get_property_from_curve_type(curve.type, curve.channel)
+def import_curve(context: bpy.context, curve: GMTCurve, bone_name: str, action: Action, group_name: str, bone_props: Dict[str, GMTBlenderBoneProps]):
+    data_path = get_data_path_from_curve_type(context, curve.type, curve.channel)
 
     if data_path == '' or len(curve.keyframes) == 0:
+        print(f'GMTWarning: Skipping type {curve.type} curve for {bone_name}...')
         return
 
     frames, values = zip(*map(lambda kf: (kf.frame, kf.value), curve.keyframes))
 
+    need_const_interpolation = False
     if data_path == 'location':
         values = transform_location(bone_props, bone_name, values)
     elif data_path == 'rotation_quaternion':
@@ -507,27 +510,13 @@ def import_curve(curve: GMTCurve, bone_name: str, action: Action, group_name: st
         # # if 'oya2' in b[0].name or 'oya3' in b[0].name:
         # #    values = list(map(lambda x: local_rots[b[0].name] @ Quaternion(x), values))
         values = transform_rotation(bone_props, bone_name, values)
-
-    # elif "pat1" in c.data_path and hasattr(b[0], c.data_path):
-    #     fcurve = action.fcurves.new(data_path=(
-    #         'pose.bones["%s"].' % b[0].name + c.data_path), action_group=group_name)
-    #     fcurve.keyframe_points.add(len(c.graph.keyframes))
-    #     fcurve.keyframe_points.foreach_set(
-    #         "co", [x for co in zip(c.graph.keyframes, values) for x in co])
-
-    #     # Pattern keyframes should have no interpolation
-    #     for kf in fcurve.keyframe_points:
-    #         kf.interpolation = 'CONSTANT'
-
-    #     fcurve.update()
-    # elif hasattr(b[0], c.data_path):
-    #     #setattr(bpy.types.PoseBone, c.data_path, bpy.props.IntProperty(name="Pat2 Unk"))
-    #     fcurve = action.fcurves.new(data_path=(
-    #         'pose.bones["%s"].' % b[0].name + c.data_path), action_group=group_name)
-    #     fcurve.keyframe_points.add(len(c.graph.keyframes))
-    #     fcurve.keyframe_points.foreach_set(
-    #         "co", [x for co in zip(c.graph.keyframes, values) for x in co])
-    #     fcurve.update()
+    elif 'pat1' in data_path:
+        need_const_interpolation = True
+        values = pattern1_to_blender(values)
+    elif 'pat' in data_path:
+        need_const_interpolation = True
+        # pat2 and pat3 use the same format
+        values = pattern2_to_blender(values)
     else:
         return
 
@@ -536,10 +525,16 @@ def import_curve(curve: GMTCurve, bone_name: str, action: Action, group_name: st
             f'pose.bones["{bone_name}"].{data_path}'), index=i, action_group=group_name)
         fcurve.keyframe_points.add(len(frames))
         fcurve.keyframe_points.foreach_set('co', [x for co in zip(frames, values_channel) for x in co])
+
+        # Not needed if the change_interpolation() handler is active
+        if need_const_interpolation:
+            for kf in fcurve.keyframe_points:
+                kf.interpolation = 'CONSTANT'
+
         fcurve.update()
 
 
-def get_property_from_curve_type(curve_type: GMTCurveType, curve_channel: GMTCurveChannel) -> str:
+def get_data_path_from_curve_type(context: bpy.context, curve_type: GMTCurveType, curve_channel: GMTCurveChannel) -> str:
     if curve_type == GMTCurveType.LOCATION:
         return 'location'
     elif curve_type == GMTCurveType.ROTATION:
@@ -549,12 +544,46 @@ def get_property_from_curve_type(curve_type: GMTCurveType, curve_channel: GMTCur
             return 'pat1_left_hand'
         elif curve_channel == GMTCurveChannel.RIGHT_HAND:
             return 'pat1_right_hand'
-        elif curve_channel == GMTCurveChannel.UNK_HAND:
-            return 'pat1_unk2'
+        # GMTCurveChannel.UNK_HAND is not explicitly checked for since it's unknown if it's actually related to hands
         else:
-            return 'pat1_unk3'
+            channel = curve_channel.value
+
+            pat_tuple = (-32_768, 32_767, 0, f'pat1_unk_{channel}', f'Pat1 Unk {channel}', "Unknown pattern property")
+            pat_string = '|'.join(map(lambda x: str(x), pat_tuple))
+
+            # The type will be created, but it won't be added to the types dict (to be deleted) here
+            # That will be taken care of in the unregister function of the addon
+            return create_pose_bone_type(context, pat_string)
+    elif curve_type in (GMTCurveType.PATTERN_UNK, GMTCurveType.PATTERN_FACE):
+        channel = curve_channel.value
+
+        # Both PATTERN_UNK and PATTERN_FACE use the same format, so just make the difference here
+        pat_num = 2 if GMTCurveType.PATTERN_UNK else 3
+
+        pat_tuple = (-128, 127, 0, f'pat{pat_num}_unk_{channel}', f'Pat{pat_num} Unk {channel}', "Unknown pattern property")
+        pat_string = '|'.join(map(lambda x: str(x), pat_tuple))
+
+        return create_pose_bone_type(context, pat_string)
     else:
         return ''
+
+
+def create_pose_bone_type(context: bpy.context, pat_string: str):
+    # Example pat: '-1|25|-1|pat1_left_hand|Left Hand|some description'
+    min_val, max_val, default_val, prop_name, pat_name, desc = pat_string.split('|', 5)
+
+    # Only set the attribute (and add it to the collection) if it was not created before
+    if not hasattr(bpy.types.PoseBone, prop_name):
+        if hasattr(context.scene, 'pattern_types'):
+            pat = context.scene.pattern_types.add()
+            pat.string = pat_string
+        else:
+            print('GMTWarning: Addon did not register correctly - missing collection property in scene')
+
+        setattr(bpy.types.PoseBone, prop_name, bpy.props.IntProperty(name=pat_name, min=int(
+            min_val), max=int(max_val), description=desc, default=int(default_val)))
+
+    return prop_name
 
 
 def menu_func_import(self, context):

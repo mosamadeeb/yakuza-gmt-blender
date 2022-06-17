@@ -26,8 +26,13 @@ def rot_to_blender(rot):
     return Quaternion([rot[3], -rot[0], rot[2], rot[1]])
 
 
-def pattern_to_blender(pattern: List[List[int]]) -> List[int]:
-    return list(map(lambda x: x[0], pattern))
+def pattern1_to_blender(pattern: List[List[int]]) -> List[int]:
+    return list(map(lambda x: (x[0],), pattern))
+
+
+def pattern2_to_blender(pattern: List[int]) -> List[int]:
+    # No need to change anything for now
+    return pattern
 
 
 def pos_from_blender(pos: Vector) -> Tuple[float]:
@@ -38,8 +43,12 @@ def rot_from_blender(rot: Quaternion) -> Tuple[float]:
     return (-rot[1], rot[3], rot[2], rot[0])
 
 
-def pattern_from_blender(pattern: List[int]) -> List[List[int]]:
+def pattern1_from_blender(pattern: List[int]) -> List[List[int]]:
     return [pattern, pattern[1:] + [pattern[-1]]]
+
+
+def pattern2_from_blender(pattern: List[int]) -> List[List[int]]:
+    return pattern
 
 
 def convert_gmt_curve_to_blender(curve: GMTCurve):
