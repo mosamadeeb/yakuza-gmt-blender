@@ -18,3 +18,35 @@ bl_info = {
 
 if blender_loader:
     from .blender.addon import *
+
+
+from . import addon_updater_ops
+from .addon_updater_prefs import GMTUpdaterPreferences
+
+
+classes = (
+    GMTUpdaterPreferences,
+)
+
+
+def register():
+    addon_updater_ops.register(bl_info)
+
+    for c in classes:
+        bpy.utils.register_class(c)
+
+    # Check for update as soon as the updater is loaded
+    # If auto check is enabled and the conditions are met, will
+    # display a pop up once the user clicks anywhere in the scene
+    addon_updater_ops.check_for_update_background()
+
+    register_addon()
+
+
+def unregister():
+    for c in reversed(classes):
+        bpy.utils.unregister_class(c)
+
+    addon_updater_ops.unregister()
+
+    unregister_addon()

@@ -1,0 +1,6 @@
+# This (almost) empty folder needs to be included in the addon files in order to avoid permission errors with the updater
+
+# Ignore everything in this directory
+*
+# Except this file
+!.gitignore

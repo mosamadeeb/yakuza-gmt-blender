@@ -102,7 +102,7 @@ def load_pattern_types(dummy):
         types[create_pose_bone_type(bpy.context, pat.string)] = bpy.types.PoseBone
 
 
-def register():
+def register_addon():
     for c in classes:
         bpy.utils.register_class(c)
 
@@ -137,7 +137,7 @@ The animation will be interpolated from the current keyframe's state to the next
     bpy.app.handlers.load_post.append(load_pattern_types)
 
 
-def unregister():
+def unregister_addon():
     # Remove from the export / import menu
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
