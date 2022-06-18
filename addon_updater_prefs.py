@@ -13,7 +13,7 @@ class GMTUpdaterPreferences(bpy.types.AddonPreferences):
 
 	auto_check_update = bpy.props.BoolProperty(
 		name="Auto-check for Update",
-		description="If enabled, auto-check for updates using an interval",
+		description="If enabled, auto-check for updates once a day",
 		default=True)
 
 	updater_interval_months = bpy.props.IntProperty(
