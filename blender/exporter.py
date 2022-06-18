@@ -53,23 +53,31 @@ class ExportGMT(Operator, ExportHelper):
             items.append((a.name, a.name, ""))
         return items
 
-    def action_update(self, context):
+    def action_update(self, context: bpy.context):
         name = self.action_name
         if '[' in name and ']' in name:
-            # used to avoid suffixes (e.g ".001")
+            # Used to avoid suffixes (e.g ".001")
             self.gmt_file_name = name[name.index('[')+1:name.index(']')]
             self.gmt_anm_name = name[:name.index('[')]
+
+            # Set the file name to be the same as the internal gmt file name
+            for screenArea in context.window.screen.areas:
+                if screenArea.type == 'FILE_BROWSER':
+                    params = screenArea.spaces[0].params
+                    params.filename = f'{self.gmt_file_name}.gmt'
+                    break
 
     action_name: EnumProperty(
         items=action_callback,
         name="Action",
         description="The action to be exported",
+        default=0,
         update=action_update)
 
     armature_name: EnumProperty(
         items=armature_callback,
         name="Armature",
-        description="The armature used for the action")
+        description="The armature which the action will use as a base")
 
     gmt_game: EnumProperty(
         items=[('KENZAN', 'Ryu Ga Gotoku Kenzan', ""),

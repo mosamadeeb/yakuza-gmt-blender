@@ -42,14 +42,15 @@ class ImportGMT(Operator, ImportHelper):
 
     armature_name: EnumProperty(
         items=armature_callback,
-        name="Target Armature",
-        description="The armature to import for the action"
+        name='Target Armature',
+        description='The armature to use as a base for importing the animation. '
+                    'This armature should be from a GMD from the same game as the animation'
     )
 
     merge_vector_curves: BoolProperty(
         name='Merge Vector',
         description='Merges vector_c_n animation into center_c_n, to allow for easier editing/previewing.\n'
-                    'Does not affect Y3-5 animations',
+                    'This option should not be disabled. Does not affect Y3-5 animations',
         default=True
     )
 
@@ -571,7 +572,13 @@ def get_data_path_from_curve_type(context: bpy.context, curve_type: GMTCurveType
 
 def create_pose_bone_type(context: bpy.context, pat_string: str):
     # Example pat: '-1|25|-1|pat1_left_hand|Left Hand|some description'
-    min_val, max_val, default_val, prop_name, pat_name, desc = pat_string.split('|', 5)
+    splits = pat_string.split('|', 5)
+    
+    if len(splits) != 6:
+        print('GMTWarning: Unexpected pattern string when creating a PoseBone attribute')
+        return ''
+
+    min_val, max_val, default_val, prop_name, pat_name, desc = splits
 
     # Only set the attribute (and add it to the collection) if it was not created before
     if not hasattr(bpy.types.PoseBone, prop_name):
