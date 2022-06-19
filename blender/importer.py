@@ -353,6 +353,8 @@ class GMTImporter:
         bpy.ops.pose.transforms_clear()
         bpy.ops.pose.select_all(action='DESELECT')
 
+        bone_props = get_edit_bones_props(ao)
+
         bpy.ops.object.mode_set(mode=mode)
         ao.hide_set(hidden)
 
@@ -384,8 +386,6 @@ class GMTImporter:
             # Try merging vector into center
             if self.merge_vector_curves:
                 merge_vector(bones.get('center_c_n'), bones.get('vector_c_n'), vector_version, self.is_auth)
-
-            bone_props = get_edit_bones_props(ao)
 
             for bone_name in bones:
                 group = action.groups.new(bone_name)

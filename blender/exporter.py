@@ -543,31 +543,13 @@ class GMTExporter:
         else:
             parent_rot = Quaternion()
 
-        loc = prop.loc
         rot = prop.rot
         rot_local = prop.rot_local
 
-        pre_mat = (
-            # rot_local.to_matrix().to_4x4().inverted()
-            rot.to_matrix().to_4x4()
-            # @ parent_rot.to_matrix().to_4x4()
-            @ Matrix.Translation(loc)
-        )
+        pre_quat = parent_rot.inverted() @ rot
+        post_quat = rot.inverted() @ parent_rot @ rot_local
 
-        post_mat = (
-            Matrix.Translation(loc).inverted()
-            @ parent_rot.to_matrix().to_4x4().inverted()
-            @ rot.to_matrix().to_4x4().inverted()
-            @ rot_local.to_matrix().to_4x4()  # .inverted()
-        )
-
-        values = list(map(lambda x: rot_from_blender((
-            pre_mat
-            @ x.to_matrix().to_4x4()
-            @ post_mat
-        ).to_quaternion()), values))
-
-        return values
+        return list(map(lambda x: rot_from_blender(pre_quat @ x @ post_quat), values))
 
 
 def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMTVectorVersion, is_auth: bool):
