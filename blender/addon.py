@@ -154,7 +154,8 @@ def unregister_addon():
 
     global types
     for attr in reversed(types):
-        delattr(types[attr], attr)
+        if hasattr(types[attr], attr):
+            delattr(types[attr], attr)
 
     types.clear()
 
