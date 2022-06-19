@@ -1298,8 +1298,8 @@ def select_link_function(self, tag):
     link = tag["zipball_url"]
 
     # -- Example: select the first (or only) asset instead source code --
-    # if "assets" in tag and "browser_download_url" in tag["assets"][0]:
-    # 	link = tag["assets"][0]["browser_download_url"]
+    if "assets" in tag and "browser_download_url" in tag["assets"][0]:
+        link = tag["assets"][0]["browser_download_url"]
 
     # -- Example: select asset based on OS, where multiple builds exist --
     # # not tested/no error checking, modify to fit your own needs!
@@ -1443,13 +1443,13 @@ def register(bl_info):
     # but the user has the option from user preferences to directly
     # update to the master branch or any other branches specified using
     # the "install {branch}/older version" operator.
-    updater.include_branches = True
+    updater.include_branches = False
 
     # (GitHub only) This options allows using "releases" instead of "tags",
     # which enables pulling down release logs/notes, as well as installs update
     # from release-attached zips (instead of the auto-packaged code generated
     # with a release/tag). Setting has no impact on BitBucket or GitLab repos.
-    updater.use_releases = False
+    updater.use_releases = True
     # Note: Releases always have a tag, but a tag may not always be a release.
     # Therefore, setting True above will filter out any non-annotated tags.
     # Note 2: Using this option will also display (and filter by) the release
@@ -1460,7 +1460,7 @@ def register(bl_info):
     # Note: updater.include_branch_list defaults to ['master'] branch if set to
     # none. Example targeting another multiple branches allowed to pull from:
     # updater.include_branch_list = ['master', 'dev']
-    updater.include_branch_list = ['main']  # None is the equivalent = ['master']
+    updater.include_branch_list = None  # None is the equivalent = ['master']
 
     # Only allow manual install, thus prompting the user to open
     # the addon's web page to download, specifically: updater.website

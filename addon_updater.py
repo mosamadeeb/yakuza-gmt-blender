@@ -947,6 +947,7 @@ class SingletonUpdater:
                     self.print_verbose(
                         "Extract - create: " + os.path.join(outdir, sub_path))
 
+        zfile.close()
         self.print_verbose("Extracted source")
 
         unpath = os.path.join(self._updater_path, "source")
