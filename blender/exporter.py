@@ -320,7 +320,7 @@ class GMTExporter:
             bone.location = self.make_curve([loc_curves[k] for k in sorted(loc_curves.keys())],
                                             GMTCurveType.LOCATION, GMTCurveChannel.ALL, bone_name)
         elif len(loc_curves) == 1:
-            k = loc_curves.keys()[0]
+            k = list(loc_curves.keys())[0]
 
             if k == 'x':
                 channel = GMTCurveChannel.X
@@ -329,7 +329,7 @@ class GMTExporter:
             elif k == 'z':
                 channel = GMTCurveChannel.Z
 
-            bone.location = self.make_curve(loc_curves[k], GMTCurveType.LOCATION, channel, bone_name)
+            bone.location = self.make_curve([loc_curves[k]], GMTCurveType.LOCATION, channel, bone_name)
         else:
             print(f'Warning: Invalid number of location channels for bone {bone_name} - skipping...')
 
