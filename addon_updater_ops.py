@@ -983,14 +983,14 @@ def update_settings_ui(self, context, element=None):
 
     if not settings.auto_check_update:
         sub_col.enabled = False
-    sub_row = sub_col.row()
-    sub_row.label(text="Interval between checks")
-    sub_row = sub_col.row(align=True)
-    check_col = sub_row.column(align=True)
-    check_col.prop(settings, "updater_interval_months")
-    check_col = sub_row.column(align=True)
-    check_col.prop(settings, "updater_interval_days")
-    check_col = sub_row.column(align=True)
+    # sub_row = sub_col.row()
+    # sub_row.label(text="Interval between checks")
+    # sub_row = sub_col.row(align=True)
+    # check_col = sub_row.column(align=True)
+    # check_col.prop(settings, "updater_interval_months")
+    # check_col = sub_row.column(align=True)
+    # check_col.prop(settings, "updater_interval_days")
+    # check_col = sub_row.column(align=True)
 
     # Consider un-commenting for local dev (e.g. to set shorter intervals)
     # check_col.prop(settings,"updater_interval_hours")
