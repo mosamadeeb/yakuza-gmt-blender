@@ -1,6 +1,7 @@
-import importlib.util
+import bpy
 
-blender_loader = importlib.util.find_spec('bpy')
+from . import addon_updater_ops
+from .addon_updater_prefs import GMTUpdaterPreferences
 
 # Include the bl_info at the top level always
 bl_info = {
@@ -15,13 +16,6 @@ bl_info = {
     "tracker_url": "https://github.com/SutandoTsukai181/yakuza-gmt-blender/issues",
     "category": "Import-Export",
 }
-
-if blender_loader:
-    from .blender.addon import *
-
-
-from . import addon_updater_ops
-from .addon_updater_prefs import GMTUpdaterPreferences
 
 
 classes = (
@@ -40,6 +34,8 @@ def register():
     # display a pop up once the user clicks anywhere in the scene
     addon_updater_ops.check_for_update_background()
 
+    from .blender.addon import register_addon
+
     register_addon()
 
 
@@ -48,5 +44,7 @@ def unregister():
         bpy.utils.unregister_class(c)
 
     addon_updater_ops.unregister()
+
+    from .blender.addon import unregister_addon
 
     unregister_addon()
