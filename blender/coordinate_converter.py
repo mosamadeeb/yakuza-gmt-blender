@@ -6,18 +6,6 @@ from ..gmt_lib import *
 from .bone_props import GMTBlenderBoneProps
 
 
-def transform_position_gmd_to_blender(pos: Vector) -> Vector:
-    return Vector((-pos.x, pos.z, pos.y))
-
-
-def transform_to_blender(pos: Vector, rot: Quaternion, scale: Vector) -> Tuple[Vector, Quaternion, Vector]:
-    pos = Vector((-pos.x, pos.z, pos.y))
-    rot = Quaternion((rot.w, -rot.x, rot.z, rot.y))
-    scale = scale.xzy
-
-    return pos, rot, scale
-
-
 def pos_to_blender(pos):
     return Vector([-pos[0], pos[2], pos[1]])
 
@@ -62,7 +50,7 @@ def convert_gmt_curve_to_blender(curve: GMTCurve):
             kf.value = rot_to_blender(kf.value)
 
 
-def transform_location(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Vector]):
+def transform_location_to_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Vector]):
     prop = bone_props[bone_name]
     head = prop.head
 
@@ -90,7 +78,7 @@ def transform_location(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: st
     return values
 
 
-def transform_rotation(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Quaternion]):
+def transform_rotation_to_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Quaternion]):
     prop = bone_props[bone_name]
 
     parent_rot = bone_props.get(prop.parent_name)
@@ -106,3 +94,53 @@ def transform_rotation(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: st
     post_quat = rot_local.inverted() @ parent_rot.inverted() @ rot
 
     return list(map(lambda x: pre_quat @ x @ post_quat, values))
+
+
+def transform_location_from_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Vector]) -> List[Tuple[float]]:
+    prop = bone_props[bone_name]
+    head = prop.head
+
+    parent_head = bone_props.get(prop.parent_name)
+    if parent_head:
+        parent_head = parent_head.head
+    else:
+        parent_head = Vector()
+
+    loc = prop.loc
+    rot = prop.rot
+
+    pre_mat = (
+        rot.to_matrix().to_4x4()
+        @ Matrix.Translation(loc)
+    )
+
+    post_mat = (
+        Matrix.Translation(loc).inverted()
+        @ rot.to_matrix().to_4x4().inverted()
+    )
+
+    values = list(map(lambda x: pos_from_blender((
+        pre_mat
+        @ Matrix.Translation(x)
+        @ post_mat
+    ).to_translation() + head - parent_head), values))
+
+    return values
+
+
+def transform_rotation_from_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Quaternion]) -> List[Tuple[float]]:
+    prop = bone_props[bone_name]
+
+    parent_rot = bone_props.get(prop.parent_name)
+    if parent_rot:
+        parent_rot = parent_rot.rot_local
+    else:
+        parent_rot = Quaternion()
+
+    rot = prop.rot
+    rot_local = prop.rot_local
+
+    pre_quat = parent_rot.inverted() @ rot
+    post_quat = rot.inverted() @ parent_rot @ rot_local
+
+    return list(map(lambda x: rot_from_blender(pre_quat @ x @ post_quat), values))

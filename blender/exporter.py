@@ -1,17 +1,18 @@
 from copy import deepcopy
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import FCurve, Operator
 from bpy_extras.io_utils import ExportHelper
-from mathutils import Matrix, Quaternion, Vector
+from mathutils import Quaternion, Vector
 
 from ..gmt_lib import *
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
 from .coordinate_converter import (pattern1_from_blender,
-                                   pattern2_from_blender, pos_from_blender,
-                                   rot_from_blender)
+                                   pattern2_from_blender,
+                                   transform_location_from_blender,
+                                   transform_rotation_from_blender)
 from .error import GMTError
 
 
@@ -439,7 +440,7 @@ class GMTExporter:
         # interpolate = True
         if curve_type == GMTCurveType.LOCATION:
             if channel_count == 3:
-                converted_values = self.transform_location(bone_name, list(map(
+                converted_values = transform_location_from_blender(self.bone_props, bone_name, list(map(
                     lambda x, y, z: Vector((x, y, z)),
                     channel_values[0],
                     channel_values[1],
@@ -457,12 +458,12 @@ class GMTExporter:
                 elif channel == GMTCurveChannel.Z:
                     vecs = list(map(lambda v: Vector((0.0, 0.0, v)), channel_values[0]))
 
-                converted_values = self.transform_location(bone_name, vecs)
+                converted_values = transform_location_from_blender(self.bone_props, bone_name, vecs)
                 channel = GMTCurveChannel.ALL
 
         elif curve_type == GMTCurveType.ROTATION:
             if channel_count == 4:
-                converted_values = self.transform_rotation(bone_name, list(map(
+                converted_values = transform_rotation_from_blender(self.bone_props, bone_name, list(map(
                     lambda w, x, y, z: Quaternion((w, x, y, z)),
                     channel_values[0],
                     channel_values[1],
@@ -478,7 +479,7 @@ class GMTExporter:
                 elif channel == GMTCurveChannel.ZW:
                     quats = list(map(lambda w, v: Quaternion((w, 0.0, 0.0, v)), channel_values[0], channel_values[1]))
 
-                converted_values = self.transform_location(bone_name, quats)
+                converted_values = transform_rotation_from_blender(self.bone_props, bone_name, quats)
                 channel = GMTCurveChannel.ALL
 
         elif curve_type == GMTCurveType.PATTERN_HAND:
@@ -502,54 +503,6 @@ class GMTExporter:
 
     def correct_pattern(self, pattern):
         return list(map(lambda x: 0 if x > 17 else x, pattern))
-
-    def transform_location(self, bone_name: str, values: List[Vector]) -> List[Tuple[float]]:
-        prop = self.bone_props[bone_name]
-        head = prop.head
-
-        parent_head = self.bone_props.get(prop.parent_name)
-        if parent_head:
-            parent_head = parent_head.head
-        else:
-            parent_head = Vector()
-
-        loc = prop.loc
-        rot = prop.rot
-
-        pre_mat = (
-            rot.to_matrix().to_4x4()
-            @ Matrix.Translation(loc)
-        )
-
-        post_mat = (
-            Matrix.Translation(loc).inverted()
-            @ rot.to_matrix().to_4x4().inverted()
-        )
-
-        values = list(map(lambda x: pos_from_blender((
-            pre_mat
-            @ Matrix.Translation(x)
-            @ post_mat
-        ).to_translation() + head - parent_head), values))
-
-        return values
-
-    def transform_rotation(self, bone_name: str, values: List[Quaternion]) -> List[Tuple[float]]:
-        prop = self.bone_props[bone_name]
-
-        parent_rot = self.bone_props.get(prop.parent_name)
-        if parent_rot:
-            parent_rot = parent_rot.rot_local
-        else:
-            parent_rot = Quaternion()
-
-        rot = prop.rot
-        rot_local = prop.rot_local
-
-        pre_quat = parent_rot.inverted() @ rot
-        post_quat = rot.inverted() @ parent_rot @ rot_local
-
-        return list(map(lambda x: rot_from_blender(pre_quat @ x @ post_quat), values))
 
 
 def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMTVectorVersion, is_auth: bool):

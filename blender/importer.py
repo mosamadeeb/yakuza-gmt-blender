@@ -13,7 +13,8 @@ from ..read_cmt import CMTAnimation, CMTData, CMTFile, read_cmt_file
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
 from .coordinate_converter import (convert_gmt_curve_to_blender,
                                    pattern1_to_blender, pattern2_to_blender,
-                                   transform_location, transform_rotation)
+                                   transform_location_to_blender,
+                                   transform_rotation_to_blender)
 from .error import GMTError
 
 # from .pattern import make_pattern_action
@@ -501,16 +502,9 @@ def import_curve(context: bpy.context, curve: GMTCurve, bone_name: str, action: 
 
     need_const_interpolation = False
     if data_path == 'location':
-        values = transform_location(bone_props, bone_name, values)
+        values = transform_location_to_blender(bone_props, bone_name, values)
     elif data_path == 'rotation_quaternion':
-        # # if 'oya1' in b[0].name:
-        # """
-        #     LOCAL ROT FIX DISABLED
-        #     #values = list(map(lambda x: rotate_quat(local_rots[b[0].name].inverted(), Quaternion(x)), values))
-        # """
-        # # if 'oya2' in b[0].name or 'oya3' in b[0].name:
-        # #    values = list(map(lambda x: local_rots[b[0].name] @ Quaternion(x), values))
-        values = transform_rotation(bone_props, bone_name, values)
+        values = transform_rotation_to_blender(bone_props, bone_name, values)
     elif 'pat1' in data_path:
         need_const_interpolation = True
         values = pattern1_to_blender(values)
@@ -573,7 +567,7 @@ def get_data_path_from_curve_type(context: bpy.context, curve_type: GMTCurveType
 def create_pose_bone_type(context: bpy.context, pat_string: str):
     # Example pat: '-1|25|-1|pat1_left_hand|Left Hand|some description'
     splits = pat_string.split('|', 5)
-    
+
     if len(splits) != 6:
         print('GMTWarning: Unexpected pattern string when creating a PoseBone attribute')
         return ''

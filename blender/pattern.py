@@ -11,7 +11,7 @@ from mathutils import Quaternion, Vector
 from ..read_gmd import read_gmd_bones_from_data
 from ..yakuza_par_py.src import *
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
-from .coordinate_converter import transform_location, transform_rotation
+from .coordinate_converter import transform_location_to_blender, transform_rotation_to_blender
 from .error import GMTError
 from .pattern_lists import *
 
