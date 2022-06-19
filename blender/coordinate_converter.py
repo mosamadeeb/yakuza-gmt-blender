@@ -103,21 +103,104 @@ def transform_rotation(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: st
     rot = prop.rot
     rot_local = prop.rot_local
 
-    pre_mat = (
-        Matrix.Translation(loc).inverted()
-        # @ parent_rot.to_matrix().to_4x4().inverted()
-        @ rot.to_matrix().to_4x4().inverted()
-        # @ rot_local.to_matrix().to_4x4().inverted()
-    )
+    # HACK: Treat DE and OE animations differntly when it comes to local rotation
+    # This is just to make sure the finger bones look the best they can with both skeleton types
+    if bone_props.get('sync_c_n'):
+        # DE
+        pre_mat = (Matrix.Identity(4)
+            @ rot.to_matrix().to_4x4().inverted()
+            @ parent_rot.to_matrix().to_4x4()
+        )
 
-    post_mat = (
-        rot_local.to_matrix().to_4x4().inverted()
-        @ rot.to_matrix().to_4x4()
-        @ parent_rot.to_matrix().to_4x4()
-        @ Matrix.Translation(loc)
-    )
+        post_mat = (Matrix.Identity(4)
+            @ rot_local.to_matrix().to_4x4().inverted()
+            @ parent_rot.to_matrix().to_4x4().inverted()
+            @ rot.to_matrix().to_4x4()
+        )
+        
+        # pre_mat = rot.inverted() @ parent_rot
+        # post_mat = rot_local.inverted() @ parent_rot.inverted() @ rot
+        
+        # kinda better hack
+        # pre_mat = (Matrix.Identity(4)
+            
+        #     @ rot.to_matrix().to_4x4().inverted()
+        #     @ rot_local.to_matrix().to_4x4().inverted()
+        #     #@ parent_rot.to_matrix().to_4x4()#.inverted()
+        #     #@ Matrix.Translation(loc).inverted()
+        # )
+
+        # post_mat = (Matrix.Identity(4)
+        #     #@ Matrix.Translation(loc)
+        #     #@ rot_local.to_matrix().to_4x4().inverted()
+        #     @ parent_rot.to_matrix().to_4x4().inverted()
+            
+        #     @ rot.to_matrix().to_4x4()
+        # )
+        
+        # better working hack
+        # pre_mat = (Matrix.Identity(4)
+        #     #@ rot_local.to_matrix().to_4x4().inverted()
+        #     @ rot.to_matrix().to_4x4().inverted()
+        #     #@ parent_rot.to_matrix().to_4x4()#.inverted()
+        #     #@ Matrix.Translation(loc).inverted()
+        # )
+
+        # post_mat = (Matrix.Identity(4)
+        #     #@ Matrix.Translation(loc)
+        #     @ rot_local.to_matrix().to_4x4().inverted()
+        #     @ parent_rot.to_matrix().to_4x4().inverted()
+        #     @ rot.to_matrix().to_4x4()
+        # )
+        
+        # semi working hack
+        # pre_mat = (Matrix.Identity(4)
+        #     #@ rot_local.to_matrix().to_4x4().inverted()
+        #     @ rot.to_matrix().to_4x4().inverted()
+        #     #@ parent_rot.to_matrix().to_4x4()#.inverted()
+        #     #@ Matrix.Translation(loc).inverted()
+        # )
+
+        # post_mat = (Matrix.Identity(4)
+        #     #@ Matrix.Translation(loc)
+        #     @ rot_local.to_matrix().to_4x4().inverted()
+        #     @ parent_rot.to_matrix().to_4x4()
+        #     @ rot.to_matrix().to_4x4()
+        # )
+    else:
+        # OE
+        pre_mat = (
+            Matrix.Translation(loc).inverted()
+            # @ parent_rot.to_matrix().to_4x4().inverted()
+            @ rot.to_matrix().to_4x4().inverted()
+            @ parent_rot.to_matrix().to_4x4()
+            # @ rot_local.to_matrix().to_4x4().inverted()
+        )
+
+        post_mat = (
+            rot_local.to_matrix().to_4x4().inverted()
+            @ parent_rot.to_matrix().to_4x4().inverted()
+            @ rot.to_matrix().to_4x4()
+            @ Matrix.Translation(loc)
+        )
+        
+        # pre_mat = (
+        #     Matrix.Translation(loc).inverted()
+        #     # @ parent_rot.to_matrix().to_4x4().inverted()
+        #     @ rot.to_matrix().to_4x4().inverted()
+        #     # @ rot_local.to_matrix().to_4x4().inverted()
+        # )
+
+        # post_mat = (
+        #     rot_local.to_matrix().to_4x4().inverted()
+        #     @ rot.to_matrix().to_4x4()
+        #     @ parent_rot.to_matrix().to_4x4()
+        #     @ Matrix.Translation(loc)
+        # )
 
     values = list(map(lambda x: (pre_mat @ x.to_matrix().to_4x4() @ post_mat).to_quaternion(), values))
+    
+    # values = list(map(lambda x: pre_mat @ x @ post_mat, values))
 
     return values
 
