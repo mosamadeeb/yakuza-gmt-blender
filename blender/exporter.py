@@ -82,8 +82,8 @@ class ExportGMT(Operator, ExportHelper):
 
     gmt_game: EnumProperty(
         items=[('KENZAN', 'Ryu Ga Gotoku Kenzan', ""),
-               ('YAKUZA_3', 'Yakuza 3, 4, Dead Souls', ""),
-               ('YAKUZA_5', 'Yakuza 5', ""),
+               ('YAKUZA3', 'Yakuza 3, 4, Dead Souls', ""),
+               ('YAKUZA5', 'Yakuza 5', ""),
                ('ISHIN', 'Yakuza 0, Kiwami, Ishin, FOTNS', ""),
                ('DE', 'Dragon Engine (Yakuza 6, Kiwami 2, Like a Dragon, ...)', "")],
         name="Game Preset",
