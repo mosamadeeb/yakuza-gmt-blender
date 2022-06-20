@@ -7,7 +7,7 @@ from .addon_updater_prefs import GMTUpdaterPreferences
 bl_info = {
     "name": "Yakuza GMT File Import/Export",
     "author": "SutandoTsukai181",
-    "version": (1, 0, 1),
+    "version": (1, 0, 2),
     "blender": (2, 80, 0),
     "location": "File > Import-Export",
     "description": "Import-Export Yakuza GMT Files",

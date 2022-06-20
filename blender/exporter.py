@@ -277,7 +277,10 @@ class GMTExporter:
         loc_curves, rot_curves, pat1_curves, pat_other_curves = dict(), dict(), dict(), dict()
 
         for c in channels:
-            if 'location' in c.data_path[c.data_path.rindex('.') + 1:]:
+            # Data path without bone name
+            data_path = c.data_path[c.data_path.rindex('.') + 1:]
+
+            if data_path == 'location':
                 if loc_len == 0:
                     loc_len = len(c.keyframe_points)
                 elif loc_len != len(c.keyframe_points):
@@ -291,7 +294,7 @@ class GMTExporter:
                 elif c.array_index == 2:
                     loc_curves['z'] = c
 
-            elif 'rotation_quaternion' in c.data_path[c.data_path.rindex('.') + 1:]:
+            elif data_path == 'rotation_quaternion':
                 if rot_len == 0:
                     rot_len = len(c.keyframe_points)
                 elif rot_len != len(c.keyframe_points):
@@ -306,11 +309,11 @@ class GMTExporter:
                 elif c.array_index == 3:
                     rot_curves['z'] = c
 
-            elif 'pat1' in c.data_path:
-                pat1_curves[c.data_path[c.data_path.rindex('.') + 1:]] = c
+            elif data_path.startswith('pat1'):
+                pat1_curves[data_path] = c
 
-            elif 'pat' in c.data_path:
-                pat_other_curves[c.data_path[c.data_path.rindex('.') + 1:]] = c
+            elif data_path.startswith('pat'):
+                pat_other_curves[data_path] = c
 
             else:
                 pass
