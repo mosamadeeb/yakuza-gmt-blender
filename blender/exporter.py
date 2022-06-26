@@ -273,41 +273,19 @@ class GMTExporter:
     def make_bone(self, bone_name: str, channels: List[FCurve]) -> GMTBone:
         bone = GMTBone(bone_name)
 
-        loc_len, rot_len = 0, 0
-        loc_curves, rot_curves, pat1_curves, pat_other_curves = dict(), dict(), dict(), dict()
+        loc_curves, rot_curves, pat1_curves, pat_other_curves = (dict() for _ in range(4))
 
+        loc_axes = ('x', 'y', 'z')
+        rot_axes = ('w',) + loc_axes
         for c in channels:
             # Data path without bone name
             data_path = c.data_path[c.data_path.rindex('.') + 1:]
 
-            if data_path == 'location':
-                if loc_len == 0:
-                    loc_len = len(c.keyframe_points)
-                elif loc_len != len(c.keyframe_points):
-                    # TODO: Add an option to fill channels (by default) when there are unmatching keyframes
-                    raise GMTError(f'FCurve {c.data_path} has channels with unmatching keyframes')
+            if data_path == 'location' and (0 <= c.array_index < 3):
+                loc_curves[loc_axes[c.array_index]] = c
 
-                if c.array_index == 0:
-                    loc_curves['x'] = c
-                elif c.array_index == 1:
-                    loc_curves['y'] = c
-                elif c.array_index == 2:
-                    loc_curves['z'] = c
-
-            elif data_path == 'rotation_quaternion':
-                if rot_len == 0:
-                    rot_len = len(c.keyframe_points)
-                elif rot_len != len(c.keyframe_points):
-                    raise GMTError(f'FCurve {c.data_path} has channels with unmatching keyframes')
-
-                if c.array_index == 0:
-                    rot_curves['w'] = c
-                elif c.array_index == 1:
-                    rot_curves['x'] = c
-                elif c.array_index == 2:
-                    rot_curves['y'] = c
-                elif c.array_index == 3:
-                    rot_curves['z'] = c
+            elif data_path == 'rotation_quaternion' and (0 <= c.array_index < 4):
+                rot_curves[rot_axes[c.array_index]] = c
 
             elif data_path.startswith('pat1'):
                 pat1_curves[data_path] = c
@@ -316,43 +294,17 @@ class GMTExporter:
                 pat_other_curves[data_path] = c
 
             else:
-                pass
+                print(f'Warning: Ignoring curve with unsupported data path {c.data_path} and index {c.array_index}')
 
         # Location curves
-        if len(loc_curves) == 3:
+        if 0 < len(loc_curves) <= 3:
             bone.location = self.make_curve([loc_curves[k] for k in sorted(loc_curves.keys())],
                                             GMTCurveType.LOCATION, GMTCurveChannel.ALL, bone_name)
-        elif len(loc_curves) == 1:
-            k = list(loc_curves.keys())[0]
-
-            if k == 'x':
-                channel = GMTCurveChannel.X
-            elif k == 'y':
-                channel = GMTCurveChannel.Y
-            elif k == 'z':
-                channel = GMTCurveChannel.Z
-
-            bone.location = self.make_curve([loc_curves[k]], GMTCurveType.LOCATION, channel, bone_name)
-        else:
-            print(f'Warning: Invalid number of location channels for bone {bone_name} - skipping...')
 
         # Rotation curves
-        if len(rot_curves) == 4:
+        if 0 < len(rot_curves) <= 4:
             bone.rotation = self.make_curve([rot_curves[k] for k in sorted(rot_curves.keys())],
                                             GMTCurveType.ROTATION, GMTCurveChannel.ALL, bone_name)
-        elif len(rot_curves) == 2 and 'w' in rot_curves:
-            k = [c for c in rot_curves.keys() if c != 'w'][0]
-
-            if k == 'x':
-                channel = GMTCurveChannel.XW
-            elif k == 'y':
-                channel = GMTCurveChannel.YW
-            elif k == 'z':
-                channel = GMTCurveChannel.ZW
-
-            bone.rotation = self.make_curve([rot_curves['w'], rot_curves[k]], GMTCurveType.ROTATION, channel, bone_name)
-        else:
-            print(f'Warning: Invalid number of rotation channels for bone {bone_name} - skipping...')
 
         # Patterns (hand)
         pattern_hand_curves = []
@@ -394,113 +346,116 @@ class GMTExporter:
 
     def make_curve(self, fcurves: List[FCurve], curve_type: GMTCurveType, channel: GMTCurveChannel, bone_name: str) -> GMTCurve:
         # fcurves contains either of the following, each in the represented order:
-        #   x, y, z location channels
-        #   one location channel
-        #   w, x, y, z rotation channels
-        #   w channel + one rotation channel
+        #   x, y, z location channels (1-3 curves)
+        #   w, x, y, z rotation channels (1-4 curves)
         #   one pattern channel
 
-        if curve_type == GMTCurveType.LOCATION:
-            channel_count = 3 if (channel == GMTCurveChannel.ALL) else 1
-        elif curve_type == GMTCurveType.ROTATION:
-            channel_count = 4 if (channel == GMTCurveChannel.ALL) else 2
-        elif curve_type in (GMTCurveType.PATTERN_HAND, GMTCurveType.PATTERN_UNK, GMTCurveType.PATTERN_FACE):
-            channel_count = 1
+        channel_count = len(fcurves)
+        channel_indices = list(map(lambda c: c.array_index, fcurves))
 
-        axes_co = []
+        # axes_co = []
+        keyframes_dict = dict()
         for i in range(channel_count):
             axis_co = [0] * 2 * len(fcurves[i].keyframe_points)
             fcurves[i].keyframe_points.foreach_get('co', axis_co)
-            axes_co.append(axis_co)
 
-        keyframes = axes_co[0][::2]
-        channel_values = [co[1:][::2] for co in axes_co]
+            keyframes_dict.update(dict.fromkeys(axis_co[::2]))
+            # axis_co_iter = iter(axis_co)
+            # axes_co.append(zip(axis_co_iter, axis_co_iter))
 
-        # Interpolation, if any, should be done here, before the keyframes are created
+        keyframes: List[float] = sorted(keyframes_dict)
 
-        # if interpolate:
-        #     # Apply constant interpolation by duplicating keyframes
-        #     pol = [True] * len(fcurves[axes[0]].keyframe_points)
-        #     axis_pol = pol.copy()
-        #     for axis in axes:
-        #         fcurves[axis].keyframe_points.foreach_get(
-        #             "interpolation", axis_pol)
-        #         pol = list(map(lambda a, b: a and (b == 0),
-        #                        pol, axis_pol))  # 'CONSTANT' = 0
+        channel_values = []
+        for i in range(channel_count):
+            channel_values.append(list(map(lambda k: fcurves[i].evaluate(k), keyframes)))
 
-        #     j = 0
-        #     for i in range(len(pol) - 1):
-        #         k = i + j
-        #         if pol[i] and curve.graph.keyframes[k + 1] - curve.graph.keyframes[k] > 1:
-        #             curve.values.insert(k + 1, curve.values[k])
-        #             curve.graph.keyframes.insert(
-        #                 k + 1, curve.graph.keyframes[k + 1] - 1)
-        #             j += 1
+        # Alternative code for fixing unmatching keyframes
+        # Was made in case using fcurve.evaluate is slow, but it turns out it isn't
+        # for i, k in enumerate(keyframes):
+        #     keyframes_dict[k] = i
 
-        curve = GMTCurve(curve_type, channel)
-        curve.keyframes = list(map(lambda f: GMTKeyframe(int(f), None), keyframes))
+        # for x, co in enumerate(axes_co):
+        #     values = [None] * len(keyframes_dict)
 
-        # interpolate = True
+        #     # Set all existing keyframes
+        #     for k, v in co:
+        #         values[keyframes_dict[k]] = v
+
+        #     # Evaluate all missing frames
+        #     for i in range(len(values)):
+        #         if values[i] is None:
+        #             values[i] = fcurves[x].evaluate(keyframes[i])
+
+        #     channel_values.append(values)
+
         if curve_type == GMTCurveType.LOCATION:
-            if channel_count == 3:
-                converted_values = transform_location_from_blender(self.bone_props, bone_name, list(map(
-                    lambda x, y, z: Vector((x, y, z)),
-                    channel_values[0],
-                    channel_values[1],
-                    channel_values[2]
-                )))
+            if channel_count != 3:
+                if (bone := self.ao.pose.bones.get(bone_name)) is None:
+                    raise GMTError(f'Could not fix unmatching keyframes for {bone_name}')
 
-            elif channel_count == 1:
-                # Convert values as whole vectors, then change channel
-                # TODO: maybe export single channel if possible (when all values are single channel)?
-                # TODO: maybe allow receiving intermediate channel counts to this function (2 for loc, 3 for rot)?
-                if channel == GMTCurveChannel.X:
-                    vecs = list(map(lambda v: Vector((v, 0.0, 0.0)), channel_values[0]))
-                elif channel == GMTCurveChannel.Y:
-                    vecs = list(map(lambda v: Vector((0.0, v, 0.0)), channel_values[0]))
-                elif channel == GMTCurveChannel.Z:
-                    vecs = list(map(lambda v: Vector((0.0, 0.0, v)), channel_values[0]))
+                for i in [x for x in range(3) if x not in channel_indices]:
+                    channel_values.insert(i, [bone.location[i]] * len(keyframes))
 
-                converted_values = transform_location_from_blender(self.bone_props, bone_name, vecs)
-                channel = GMTCurveChannel.ALL
+            converted_values = transform_location_from_blender(self.bone_props, bone_name, list(map(
+                lambda x, y, z: Vector((x, y, z)),
+                channel_values[0],
+                channel_values[1],
+                channel_values[2]
+            )))
+
+            # Check if there are any completely zero channels
+            empties = list(map(lambda i: all(map(lambda x: x[i] == 0.0, converted_values)), range(3)))
+
+            # If at least two channels are empty, change the channel type and update the values
+            if empties.count(True) >= 2:
+                # If no channels are non-empty, choose X
+                i = empties.index(False) if False in empties else 0
+
+                converted_values = list(map(lambda v: (v[i],), converted_values))
+                channel = (GMTCurveChannel.X, GMTCurveChannel.Y, GMTCurveChannel.Z)[i]
 
         elif curve_type == GMTCurveType.ROTATION:
-            if channel_count == 4:
-                converted_values = transform_rotation_from_blender(self.bone_props, bone_name, list(map(
-                    lambda w, x, y, z: Quaternion((w, x, y, z)),
-                    channel_values[0],
-                    channel_values[1],
-                    channel_values[2],
-                    channel_values[3],
-                )))
+            if channel_count != 4:
+                if (bone := self.ao.pose.bones.get(bone_name)) is None:
+                    raise GMTError(f'Could not fix unmatching keyframes for {bone_name}')
 
-            elif channel_count == 2:
-                if channel == GMTCurveChannel.XW:
-                    quats = list(map(lambda w, v: Quaternion((w, v, 0.0, 0.0)), channel_values[0], channel_values[1]))
-                elif channel == GMTCurveChannel.YW:
-                    quats = list(map(lambda w, v: Quaternion((w, 0.0, v, 0.0)), channel_values[0], channel_values[1]))
-                elif channel == GMTCurveChannel.ZW:
-                    quats = list(map(lambda w, v: Quaternion((w, 0.0, 0.0, v)), channel_values[0], channel_values[1]))
+                for i in [x for x in range(4) if x not in channel_indices]:
+                    channel_values.insert(i, [bone.rotation_quaternion[i]] * len(keyframes))
 
-                converted_values = transform_rotation_from_blender(self.bone_props, bone_name, quats)
-                channel = GMTCurveChannel.ALL
+            converted_values = transform_rotation_from_blender(self.bone_props, bone_name, list(map(
+                lambda w, x, y, z: Quaternion((w, x, y, z)),
+                channel_values[0],
+                channel_values[1],
+                channel_values[2],
+                channel_values[3],
+            )))
+
+            # Check if there are any completely zero channels (from x, y, z only)
+            empties = list(map(lambda i: all(map(lambda x: x[i] == 0.0, converted_values)), range(3)))
+
+            # If at least two channels are empty, change the channel type and update the values
+            if empties.count(True) >= 2:
+                # If no channels are non-empty, choose X
+                i = empties.index(False) if False in empties else 0
+
+                # v[3] is w channel
+                converted_values = list(map(lambda v: (v[i], v[3]), converted_values))
+                channel = (GMTCurveChannel.XW, GMTCurveChannel.YW, GMTCurveChannel.ZW)[i]
 
         elif curve_type == GMTCurveType.PATTERN_HAND:
-            if channel_count == 1:
-                converted_values = channel_values[0]
+            converted_values = channel_values[0]
 
-                if self.gmt_game != 'DE':
-                    # Prevent pattern numbers larger than old engine max to be exported
-                    converted_values = self.correct_pattern(converted_values)
+            if self.gmt_game != 'DE':
+                # Prevent pattern numbers larger than old engine max to be exported
+                converted_values = self.correct_pattern(converted_values)
 
-                converted_values = list(map(lambda s, e: [int(s), int(e)], *pattern1_from_blender(converted_values)))
+            converted_values = list(map(lambda s, e: [int(s), int(e)], *pattern1_from_blender(converted_values)))
         elif curve_type in (GMTCurveType.PATTERN_UNK, GMTCurveType.PATTERN_FACE):
-            if channel_count == 1:
-                converted_values = list(map(lambda v: [int(v)], pattern2_from_blender(channel_values[0])))
+            converted_values = list(map(lambda v: [int(v)], pattern2_from_blender(channel_values[0])))
 
-        # Assign the values
-        for kf, val in zip(curve.keyframes, converted_values):
-            kf.value = val
+        # Create the GMTCurve after finalizing all changes to the FCurves
+        curve = GMTCurve(curve_type, channel)
+        curve.keyframes = list(map(lambda f, v: GMTKeyframe(int(f), v), keyframes, converted_values))
 
         return curve
 
