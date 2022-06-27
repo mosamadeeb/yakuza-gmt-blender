@@ -488,7 +488,7 @@ def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
 
         elif vector_bone.location.channel == GMTCurveChannel.Y:
             vector_bone.location.keyframes.clear()
-            vector_bone.location.keyframes.append(GMTKeyframe(0, (0.0)))
+            vector_bone.location.keyframes.append(GMTKeyframe(0, (0.0,)))
 
         if not is_auth:
             # Clear X and Z channels in center location
@@ -498,7 +498,7 @@ def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
 
             elif center_bone.location.channel == GMTCurveChannel.X or center_bone.location.channel == GMTCurveChannel.Z:
                 center_bone.location.keyframes.clear()
-                center_bone.location.keyframes.append(GMTKeyframe(0, (0.0)))
+                center_bone.location.keyframes.append(GMTKeyframe(0, (0.0,)))
 
             # Clear center rotation
             center_bone.rotation = GMTCurve.new_rotation_curve()
