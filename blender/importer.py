@@ -1,3 +1,4 @@
+from copy import deepcopy
 from math import tan
 from os.path import basename
 from typing import Dict
@@ -386,6 +387,7 @@ class GMTImporter:
 
             # Try merging vector into center
             if self.merge_vector_curves:
+                # Bone names are constant because vector does not exist pre-Ishin
                 merge_vector(bones.get('center_c_n'), bones.get('vector_c_n'), vector_version, self.is_auth)
 
             for bone_name in bones:
@@ -417,8 +419,8 @@ def merge_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
 
     if (vector_version == GMTVectorVersion.OLD_VECTOR and not is_auth) or vector_version == GMTVectorVersion.DRAGON_VECTOR:
         # Both curves' values should be applied, so add vector to center
-        add_curve(center_bone.location, vector_bone.location)
-        add_curve(center_bone.rotation, vector_bone.rotation)
+        center_bone.location = add_curve(center_bone.location, vector_bone.location, GMTCurveType.LOCATION)
+        center_bone.rotation = add_curve(center_bone.rotation, vector_bone.rotation, GMTCurveType.ROTATION)
 
     # Reset vector's curves to avoid confusion, since it won't be used anymore
     vector_bone.location = GMTCurve.new_location_curve()
@@ -427,14 +429,30 @@ def merge_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
     convert_gmt_curve_to_blender(vector_bone.rotation)
 
 
-def add_curve(curve: GMTCurve, other: GMTCurve):
+def add_curve(curve: GMTCurve, other: GMTCurve, expected_curve_type: GMTCurveType) -> GMTCurve:
     """Adds the animation data of a curve to this curve. Both curves need to have the same GMTCurveType.
-    If the type is LOCATION, vectors will be added.
-    If the type is ROTATION, quaternions will be multiplied.
+    If their type is LOCATION, vectors will be added.
+    If their type is ROTATION, quaternions will be multiplied.
+    expected_curve_type is only used if both curves are None
     """
 
+    if (other or curve) is None:
+        if expected_curve_type == GMTCurveType.LOCATION:
+            curve = GMTCurve.new_location_curve()
+        elif expected_curve_type == GMTCurveType.ROTATION:
+            curve = GMTCurve.new_rotation_curve()
+        else:
+            curve = GMTCurve(expected_curve_type)
+
+        convert_gmt_curve_to_blender(curve)
+        return curve
+    elif other is None:
+        return curve
+    elif curve is None:
+        return deepcopy(other)
+
     if curve.type != other.type:
-        raise Exception('Curves with different types cannot be added')
+        raise GMTError('Curves with different types cannot be added')
 
     if curve.type == GMTCurveType.LOCATION:
         # Vector add and lerp
@@ -451,7 +469,7 @@ def add_curve(curve: GMTCurve, other: GMTCurve):
         if len(curve.keyframes) == 0:
             curve.keyframes.append(GMTKeyframe(0, Quaternion()))
     else:
-        raise Exception('Incompatible curve type for addition')
+        raise GMTError(f'Incompatible curve type for addition: {curve.type}')
 
     result = list()
     curve_dict = {kf.frame: kf.value for kf in curve.keyframes}
@@ -489,6 +507,7 @@ def add_curve(curve: GMTCurve, other: GMTCurve):
             result.append(GMTKeyframe(i, add(v1, v2)))
 
     curve.keyframes = result
+    return curve
 
 
 def import_curve(context: bpy.context, curve: GMTCurve, bone_name: str, action: Action, group_name: str, bone_props: Dict[str, GMTBlenderBoneProps]):
