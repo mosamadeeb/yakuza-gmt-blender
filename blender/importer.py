@@ -83,15 +83,15 @@ class ImportGMT(Operator, ImportHelper):
         import time
 
         try:
-            arm = self.check_armature(context)
-            if isinstance(arm, str):
-                raise GMTError(arm)
-
             start_time = time.time()
             if self.filepath.endswith('.cmt'):
                 importer = CMTImporter(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
                 importer.read()
             else:
+                arm = self.check_armature(context)
+                if isinstance(arm, str):
+                    raise GMTError(arm)
+
                 importer = GMTImporter(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
                 importer.read()
 
@@ -158,6 +158,11 @@ class CMTImporter:
     def animate_camera(self):
         camera = self.context.scene.camera
 
+        if not camera:
+            camera_data = bpy.data.cameras.new(name='Camera')
+            camera = bpy.data.objects.new('Camera', camera_data)
+            self.context.scene.collection.objects.link(camera)
+
         if not camera.animation_data:
             camera.animation_data_create()
 
@@ -170,8 +175,7 @@ class CMTImporter:
 
         for anm in self.cmt_file.animations:
             frame_count = anm.frame_count
-            camera.animation_data.action = bpy.data.actions.new(
-                name=self.cmt_file.name)
+            camera.animation_data.action = bpy.data.actions.new(name=self.cmt_file.name)
             action = camera.animation_data.action
 
             group = action.groups.new("camera")
