@@ -51,7 +51,7 @@ def convert_gmt_curve_to_blender(curve: GMTCurve):
 
 
 def transform_location_to_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Vector]):
-    prop = bone_props[bone_name]
+    prop = bone_props.get(bone_name, GMTBlenderBoneProps())
     head = prop.head
 
     parent_head = bone_props.get(prop.parent_name)
@@ -79,7 +79,7 @@ def transform_location_to_blender(bone_props: Dict[str, GMTBlenderBoneProps], bo
 
 
 def transform_rotation_to_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Quaternion]):
-    prop = bone_props[bone_name]
+    prop = bone_props.get(bone_name, GMTBlenderBoneProps())
 
     parent_rot = bone_props.get(prop.parent_name)
     if parent_rot:
@@ -97,7 +97,7 @@ def transform_rotation_to_blender(bone_props: Dict[str, GMTBlenderBoneProps], bo
 
 
 def transform_location_from_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Vector]) -> List[Tuple[float]]:
-    prop = bone_props[bone_name]
+    prop = bone_props.get(bone_name, GMTBlenderBoneProps())
     head = prop.head
 
     parent_head = bone_props.get(prop.parent_name)
@@ -129,7 +129,7 @@ def transform_location_from_blender(bone_props: Dict[str, GMTBlenderBoneProps], 
 
 
 def transform_rotation_from_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Quaternion]) -> List[Tuple[float]]:
-    prop = bone_props[bone_name]
+    prop = bone_props.get(bone_name, GMTBlenderBoneProps())
 
     parent_rot = bone_props.get(prop.parent_name)
     if parent_rot:

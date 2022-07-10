@@ -12,6 +12,14 @@ class GMTBlenderBoneProps:
     rot_local: Quaternion
     parent_name: str
 
+    # Default props
+    def __init__(self):
+        self.head = Vector()
+        self.loc = Vector()
+        self.rot = Quaternion()
+        self.rot_local = Quaternion()
+        self.parent_name = ''
+
 
 def get_edit_bones_props(ao: bpy.types.Object) -> Dict[str, GMTBlenderBoneProps]:
     bpy.ops.object.mode_set(mode='EDIT')
