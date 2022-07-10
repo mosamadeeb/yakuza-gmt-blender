@@ -10,6 +10,8 @@ from bpy_extras.io_utils import ImportHelper
 from mathutils import Euler, Quaternion, Vector
 
 from ..gmt_lib import *
+from ..gmt_lib.gmt.structure.ifa import *
+from ..gmt_lib.gmt.gmt_reader import read_ifa
 from ..read_cmt import CMTAnimation, CMTData, CMTFile, read_cmt_file
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
 from .coordinate_converter import (convert_gmt_curve_to_blender,
@@ -27,7 +29,7 @@ class ImportGMT(Operator, ImportHelper):
     bl_idname = "import_scene.gmt"
     bl_label = "Import Yakuza GMT"
 
-    filter_glob: StringProperty(default="*.gmt;*.cmt", options={"HIDDEN"})
+    filter_glob: StringProperty(default="*.gmt;*.cmt;*.ifa", options={"HIDDEN"})
 
     def armature_callback(self, context):
         items = []
@@ -83,17 +85,18 @@ class ImportGMT(Operator, ImportHelper):
         import time
 
         try:
-            start_time = time.time()
             if self.filepath.endswith('.cmt'):
-                importer = CMTImporter(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
-                importer.read()
+                importer_cls = CMTImporter
             else:
                 arm = self.check_armature(context)
                 if isinstance(arm, str):
                     raise GMTError(arm)
 
-                importer = GMTImporter(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
-                importer.read()
+                importer_cls = IFAImporter if self.filepath.endswith('.ifa') else GMTImporter
+
+            start_time = time.time()
+            importer = importer_cls(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
+            importer.read()
 
             elapsed_s = "{:.2f}s".format(time.time() - start_time)
             print("GMT import finished in " + elapsed_s)
@@ -140,6 +143,59 @@ class ImportGMT(Operator, ImportHelper):
 
         return "No armature found to add animation to"
 
+def setup_armature(ao: bpy.types.Object) -> Dict[str, GMTBlenderBoneProps]:
+    if not ao.animation_data:
+        ao.animation_data_create()
+
+    hidden = ao.hide_get()
+    mode = ao.mode
+
+    # Necessary steps to ensure proper importing
+    ao.hide_set(False)
+    bpy.ops.object.mode_set(mode='POSE')
+    bpy.ops.pose.select_all(action='SELECT')
+    bpy.ops.pose.transforms_clear()
+    bpy.ops.pose.select_all(action='DESELECT')
+
+    bone_props = get_edit_bones_props(ao)
+
+    bpy.ops.object.mode_set(mode=mode)
+    ao.hide_set(hidden)
+    
+    return bone_props
+
+
+class IFAImporter:
+    def __init__(self, context: bpy.context, filepath, import_settings: Dict):
+        self.filepath = filepath
+        self.context = context
+
+    ifa: IFA
+
+    def read(self):
+        self.ifa = read_ifa(self.filepath)
+        self.make_action()
+
+    def make_action(self):
+        ao = self.context.active_object
+
+        bone_props = setup_armature(ao)
+
+        action = ao.animation_data.action = bpy.data.actions.new(name=f'{basename(self.filepath)} [IFA]')
+
+        # Instead of rewriting the curve importing functions, we can just convert the IFA bones to GMT curves
+        for bone in self.ifa.bone_list:
+            group = action.groups.new(bone.name)
+
+            for curve_values, curve_type in zip((bone.location, bone.rotation), (GMTCurveType.LOCATION, GMTCurveType.ROTATION)):
+                curve = GMTCurve(curve_type)
+                curve.keyframes.append(GMTKeyframe(0, curve_values))
+
+                convert_gmt_curve_to_blender(curve)
+                import_curve(self.context, curve, bone.name, action, group.name, bone_props)
+
+        self.context.scene.frame_start = 0
+        self.context.scene.frame_current = 0
 
 class CMTImporter:
     def __init__(self, context: bpy.context, filepath, import_settings: Dict):
@@ -335,34 +391,17 @@ class GMTImporter:
     gmt: GMT
 
     def read(self):
-        # try:
-        self.gmt = read_gmt(self.filepath)
-        self.make_actions()
-        # except Exception as e:
-        #     raise GMTError(f'{e}')
+        try:
+            self.gmt = read_gmt(self.filepath)
+            self.make_actions()
+        except Exception as e:
+            raise GMTError(f'{e}')
 
     def make_actions(self):
-        ao = self.context.active_object
-
         print(f'Importing file: {self.gmt.name}')
 
-        if not ao.animation_data:
-            ao.animation_data_create()
-
-        hidden = ao.hide_get()
-        mode = ao.mode
-
-        # necessary steps to ensure proper importing
-        ao.hide_set(False)
-        bpy.ops.object.mode_set(mode='POSE')
-        bpy.ops.pose.select_all(action='SELECT')
-        bpy.ops.pose.transforms_clear()
-        bpy.ops.pose.select_all(action='DESELECT')
-
-        bone_props = get_edit_bones_props(ao)
-
-        bpy.ops.object.mode_set(mode=mode)
-        ao.hide_set(hidden)
+        ao = self.context.active_object
+        bone_props = setup_armature(ao)
 
         vector_version = self.gmt.vector_version
 
