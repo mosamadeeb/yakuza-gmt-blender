@@ -8,6 +8,8 @@ from bpy_extras.io_utils import ExportHelper
 from mathutils import Quaternion, Vector
 
 from ..gmt_lib import *
+from ..gmt_lib.gmt.gmt_writer import write_ifa_to_file
+from ..gmt_lib.gmt.structure.ifa import *
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
 from .coordinate_converter import (pattern1_from_blender,
                                    pattern2_from_blender,
@@ -21,9 +23,22 @@ class ExportGMT(Operator, ExportHelper):
     bl_idname = "export_scene.gmt"
     bl_label = "Export Yakuza GMT"
 
-    filter_glob: StringProperty(default="*.gmt", options={"HIDDEN"})
+    filter_glob: StringProperty(default="*.gmt;*.cmt;*.ifa", options={"HIDDEN"})
 
+    # Don't force a file extension
     filename_ext = '.gmt'
+    check_extension = None
+
+    def export_format_update(self, context: bpy.context):
+        # Change the file extension
+        for screenArea in context.window.screen.areas:
+            if screenArea.type == 'FILE_BROWSER':
+                params = screenArea.spaces[0].params
+                if len(params.filename) > 3 and params.filename[-4] == '.':
+                    params.filename = params.filename[:-3] + self.export_format.lower()
+                else:
+                    params.filename += '.' + self.export_format.lower()
+                break
 
     def action_callback(self, context: bpy.context):
         items = []
@@ -65,8 +80,18 @@ class ExportGMT(Operator, ExportHelper):
             for screenArea in context.window.screen.areas:
                 if screenArea.type == 'FILE_BROWSER':
                     params = screenArea.spaces[0].params
-                    params.filename = f'{self.gmt_file_name}.gmt'
+                    params.filename = f'{self.gmt_file_name}.{self.export_format.lower()}'
                     break
+
+    export_format: EnumProperty(
+        items=[('GMT', 'GMT (Model Animation)', ''),
+               ('IFA', 'IFA (Pre-Ishin Face Animation)', ''),
+               ],
+        name="Export Format",
+        description="The animation format to export as",
+        default=0,
+        update=export_format_update
+    )
 
     action_name: EnumProperty(
         items=action_callback,
@@ -85,7 +110,8 @@ class ExportGMT(Operator, ExportHelper):
                ('YAKUZA3', 'Yakuza 3, 4, Dead Souls', ""),
                ('YAKUZA5', 'Yakuza 5', ""),
                ('ISHIN', 'Yakuza 0, Kiwami, Ishin, FOTNS', ""),
-               ('DE', 'Dragon Engine (Yakuza 6, Kiwami 2, Like a Dragon, ...)', "")],
+               ('DE', 'Dragon Engine (Yakuza 6, Kiwami 2, Like a Dragon, ...)', "")
+               ],
         name="Game Preset",
         description="Target game which the exported GMT will be used in",
         default=3)
@@ -124,26 +150,32 @@ class ExportGMT(Operator, ExportHelper):
         layout.use_property_split = True
         layout.use_property_decorate = True  # No animation.
 
+        layout.prop(self, 'export_format')
+        layout.separator()
         layout.prop(self, 'armature_name')
         layout.prop(self, 'action_name')
         layout.separator()
-        layout.prop(self, 'gmt_file_name')
-        layout.prop(self, 'gmt_anm_name')
-        layout.separator()
-        layout.prop(self, 'gmt_game')
 
-        vector_col = layout.column()
-        vector_col.prop(self, 'split_vector_curves')
+        if self.export_format == 'GMT':
+            layout.prop(self, 'gmt_file_name')
+            layout.prop(self, 'gmt_anm_name')
+            layout.separator()
+            layout.prop(self, 'gmt_game')
 
-        is_auth_row = vector_col.row()
-        is_auth_row.prop(self, 'is_auth')
+            vector_col = layout.column()
+            vector_col.prop(self, 'split_vector_curves')
 
-        is_auth_row.enabled = self.split_vector_curves and self.gmt_game == 'ISHIN'
-        vector_col.enabled = self.gmt_game in ['ISHIN', 'DE']
+            is_auth_row = vector_col.row()
+            is_auth_row.prop(self, 'is_auth')
 
-        # update file and anm name if both are empty
-        if self.gmt_file_name == self.gmt_anm_name == "":
-            self.action_update(context)
+            is_auth_row.enabled = self.split_vector_curves and self.gmt_game == 'ISHIN'
+            vector_col.enabled = self.gmt_game in ['ISHIN', 'DE']
+
+            # Update file and anm name if both are empty
+            if self.gmt_file_name == self.gmt_anm_name == "":
+                self.action_update(context)
+
+        self.export_format_update(context)
 
     def execute(self, context):
         import time
@@ -153,12 +185,14 @@ class ExportGMT(Operator, ExportHelper):
             if isinstance(arm, str):
                 raise GMTError(arm)
 
+            exporter_cls = IFAExporter if self.export_format == 'IFA' else GMTExporter
+
             start_time = time.time()
-            exporter = GMTExporter(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
+            exporter = exporter_cls(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
             exporter.export()
 
             elapsed_s = "{:.2f}s".format(time.time() - start_time)
-            print("GMT export finished in " + elapsed_s)
+            print("Export finished in " + elapsed_s)
 
             self.report({"INFO"}, f"Finished exporting {exporter.action_name}")
             return {'FINISHED'}
@@ -207,7 +241,6 @@ class GMTExporter:
         self.filepath = filepath
         self.context = context
 
-        # used for bone translation before exporting
         self.action_name = export_settings.get("action_name")
         self.gmt_anm_name = export_settings.get("gmt_anm_name")
         self.gmt_game = export_settings.get("gmt_game")
@@ -215,12 +248,6 @@ class GMTExporter:
         self.is_auth = export_settings.get("is_auth")
 
         gmt_file_name = export_settings.get("gmt_file_name")
-
-        # self.start_frame = export_settings.get("start_frame")  # convenience
-        # self.end_frame = export_settings.get("end_frame")  # convenience
-        # self.interpolation = export_settings.get("interpolation")  # manual interpolation if needed
-        # # auth or motion, for converting center/vector pos
-        # self.gmt_context = export_settings.get("gmt_context")
 
         # Important: to update the vector version properly, scale bone has to be added after creating the animation
         self.gmt = GMT(gmt_file_name, GMTVersion[self.gmt_game] if self.gmt_game != 'DE' else GMTVersion.ISHIN)
@@ -250,7 +277,7 @@ class GMTExporter:
         if not action:
             raise GMTError('Action not found')
 
-        # Framerate apparently does not affect anything, and end frame is unused
+        # Framerate only affects motion GMTs (not auth/hacts), and end frame is unused
         anm = GMTAnimation(self.gmt_anm_name, 30.0, 0)
 
         if self.gmt.version == GMTVersion.ISHIN and self.gmt_game != 'DE':
@@ -461,6 +488,62 @@ class GMTExporter:
 
     def correct_pattern(self, pattern):
         return list(map(lambda x: 0 if x > 17 else x, pattern))
+
+
+class IFAExporter(GMTExporter):
+    def __init__(self, context: bpy.context, filepath, export_settings: Dict):
+        self.filepath = filepath
+        self.context = context
+
+        self.action_name = export_settings.get("action_name")
+
+    def export(self):
+        print(f"Exporting action: {self.action_name}")
+
+        # Active object was set correctly during operator execution
+        self.ao = self.context.active_object
+        if not self.ao or self.ao.type != 'ARMATURE':
+            raise GMTError('Armature not found')
+
+        if not (face_bone := self.ao.pose.bones.get('face')):
+            raise GMTError('Face bone not found')
+
+        self.bone_props = get_edit_bones_props(self.ao)
+        self.face_children = list(map(lambda x: x.name, face_bone.children_recursive))
+
+        self.ifa = IFA(self.make_bone_list())
+        write_ifa_to_file(self.ifa, self.filepath)
+
+        print("IFA Export finished")
+
+    def make_bone_list(self):
+        action = bpy.data.actions.get(self.action_name)
+
+        if not action:
+            raise GMTError('Action not found')
+
+        bone_list = list()
+        for group in [x for x in action.groups if x.name in self.face_children]:
+            gmt_bone = self.make_bone(group.name, group.channels)
+
+            has_location = gmt_bone.location and len(gmt_bone.location.keyframes)
+            has_rotation = gmt_bone.rotation and len(gmt_bone.rotation.keyframes)
+
+            if not (has_location and has_rotation):
+                print(f'Warning: Ignoring bone due to missing animation: {group.name}')
+                continue
+
+            bone = IFABone(group.name, self.bone_props[group.name].parent_name)
+
+            gmt_bone.location.fill_channels()
+            bone.location = gmt_bone.location.keyframes[0].value
+
+            gmt_bone.rotation.fill_channels()
+            bone.rotation = gmt_bone.rotation.keyframes[0].value
+
+            bone_list.append(bone)
+
+        return bone_list
 
 
 def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMTVectorVersion, is_auth: bool):

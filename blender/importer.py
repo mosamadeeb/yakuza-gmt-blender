@@ -99,7 +99,7 @@ class ImportGMT(Operator, ImportHelper):
             importer.read()
 
             elapsed_s = "{:.2f}s".format(time.time() - start_time)
-            print("GMT import finished in " + elapsed_s)
+            print("Import finished in " + elapsed_s)
 
             self.report({"INFO"}, f"Finished importing {basename(self.filepath)}")
             return {'FINISHED'}
@@ -181,7 +181,7 @@ class IFAImporter:
 
         bone_props = setup_armature(ao)
 
-        action = ao.animation_data.action = bpy.data.actions.new(name=f'{basename(self.filepath)} [IFA]')
+        action = ao.animation_data.action = bpy.data.actions.new(name=f'{basename(self.filepath)}')
 
         # Instead of rewriting the curve importing functions, we can just convert the IFA bones to GMT curves
         for bone in self.ifa.bone_list:
@@ -653,4 +653,4 @@ def create_pose_bone_type(context: bpy.context, pat_string: str):
 
 
 def menu_func_import(self, context):
-    self.layout.operator(ImportGMT.bl_idname, text='Yakuza Animation (.gmt/.cmt)')
+    self.layout.operator(ImportGMT.bl_idname, text='Yakuza Animation (.gmt/.cmt/.ifa)')
