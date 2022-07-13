@@ -408,6 +408,8 @@ class GMTImporter:
         end_frame = 1
         frame_rate = 30
         for anm in self.gmt.animation_list:
+            anm_bone_props = dict() if (self.gmt.is_face_gmt and anm.is_face_anm()) else bone_props
+
             end_frame = max(end_frame, anm.end_frame)
             frame_rate = anm.frame_rate
 
@@ -438,7 +440,7 @@ class GMTImporter:
                 print(f'Importing ActionGroup: {group.name}')
 
                 for curve in bones[bone_name].curves:
-                    import_curve(self.context, curve, bone_name, action, group.name, bone_props)
+                    import_curve(self.context, curve, bone_name, action, group.name, anm_bone_props)
 
         # If pattern previewing is to be enabled later, this should be moved to the addon register function instead
         # Although that may require bone.par path in order to import the patterns with the basic skeleton GMDs
