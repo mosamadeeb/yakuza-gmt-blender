@@ -1,5 +1,4 @@
 from copy import deepcopy
-from math import tan
 from os.path import basename
 from typing import Dict
 
@@ -7,14 +6,15 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import Action, Operator
 from bpy_extras.io_utils import ImportHelper
-from mathutils import Euler, Quaternion, Vector
+from mathutils import Quaternion, Vector
 
 from ..gmt_lib import *
+from ..gmt_lib.gmt.gmt_reader import read_cmt, read_ifa
+from ..gmt_lib.gmt.structure.cmt import *
 from ..gmt_lib.gmt.structure.ifa import *
-from ..gmt_lib.gmt.gmt_reader import read_ifa
-from ..read_cmt import CMTAnimation, CMTData, CMTFile, read_cmt_file
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
-from .coordinate_converter import (convert_gmt_curve_to_blender,
+from .coordinate_converter import (convert_cmt_anm_to_blender,
+                                   convert_gmt_curve_to_blender,
                                    pattern1_to_blender, pattern2_to_blender,
                                    transform_location_to_blender,
                                    transform_rotation_to_blender)
@@ -143,6 +143,7 @@ class ImportGMT(Operator, ImportHelper):
 
         return "No armature found to add animation to"
 
+
 def setup_armature(ao: bpy.types.Object) -> Dict[str, GMTBlenderBoneProps]:
     if not ao.animation_data:
         ao.animation_data_create()
@@ -161,7 +162,7 @@ def setup_armature(ao: bpy.types.Object) -> Dict[str, GMTBlenderBoneProps]:
 
     bpy.ops.object.mode_set(mode=mode)
     ao.hide_set(hidden)
-    
+
     return bone_props
 
 
@@ -197,188 +198,73 @@ class IFAImporter:
         self.context.scene.frame_start = 0
         self.context.scene.frame_current = 0
 
+
 class CMTImporter:
     def __init__(self, context: bpy.context, filepath, import_settings: Dict):
         self.filepath = filepath
         self.context = context
 
-    cmt_file: CMTFile
+    cmt: CMT
 
     def read(self):
-        self.cmt_file = read_cmt_file(self.filepath)
-        if type(self.cmt_file) is str:
-            raise GMTError(self.cmt_file)
-
+        self.cmt = read_cmt(self.filepath)
         self.animate_camera()
 
     def animate_camera(self):
-        camera = self.context.scene.camera
+        self.camera = self.context.scene.camera
 
-        if not camera:
+        if not self.camera:
             camera_data = bpy.data.cameras.new(name='Camera')
-            camera = bpy.data.objects.new('Camera', camera_data)
-            self.context.scene.collection.objects.link(camera)
+            self.camera = bpy.data.objects.new('Camera', camera_data)
+            self.context.scene.collection.objects.link(self.camera)
 
-        if not camera.animation_data:
-            camera.animation_data_create()
+        if not self.camera.animation_data:
+            self.camera.animation_data_create()
 
-        camera.rotation_mode = 'QUATERNION'
-        camera.data.lens_unit = 'MILLIMETERS'
-        camera.data.sensor_fit = 'VERTICAL'
-        camera.data.sensor_height = 100.0
+        self.camera.rotation_mode = 'QUATERNION'
+        self.camera.data.lens_unit = 'MILLIMETERS'
+        self.camera.data.sensor_fit = 'VERTICAL'
+        self.camera.data.sensor_height = 100.0
 
-        #sensor_diag = sqrt((camera.data.sensor_width ** 2 + camera.data.sensor_height ** 2))
+        single = bool(self.cmt.animation)
+        for i, anm in enumerate(self.cmt.animation_list):
+            frame_rate = anm.frame_rate
+            frame_count = len(anm.frames)
+            self.make_action(anm, basename(self.filepath) + '' if single else f'({i})')
 
-        for anm in self.cmt_file.animations:
-            frame_count = anm.frame_count
-            camera.animation_data.action = bpy.data.actions.new(name=self.cmt_file.name)
-            action = camera.animation_data.action
-
-            group = action.groups.new("camera")
-
-            anm.anm_data = self.convert_cam_to_blender(anm.anm_data)
-
-            locations, rotations, foc_lengths = [], [], []
-            for data in anm.anm_data:
-                pos = Vector((data.pos_x, data.pos_y, data.pos_z))
-                foc = Vector((data.foc_x, data.foc_y, data.foc_z))
-                locations.append(pos)
-
-                #foc_len = (foc - pos).length * 1000
-                """
-                if data.fov == 0.0:
-                    print("ZERO FOV")
-                if tan(data.fov / 2) == 0.0:
-                    print("ZERO TAN")
-                """
-                foc_len = (camera.data.sensor_height / 2) / tan(data.fov / 2)
-                foc_lengths.append(foc_len)
-
-            rotations = self.get_cam_rotations(anm)
-
-            frames = list(iter(range(anm.frame_count)))
-
-            for i in range(3):
-                loc = [x[i] for x in locations]
-                location = action.fcurves.new(data_path=(
-                    'location'), index=i, action_group=group.name)
-                location.keyframe_points.add(anm.frame_count)
-                location.keyframe_points.foreach_set(
-                    "co", [x for co in zip(frames, loc) for x in co])
-                location.update()
-            for i in range(4):
-                rot = [x[i] for x in rotations]
-                rotation = action.fcurves.new(
-                    data_path=('rotation_quaternion'), index=i, action_group=group.name)
-                rotation.keyframe_points.add(anm.frame_count)
-                rotation.keyframe_points.foreach_set(
-                    "co", [x for co in zip(frames, rot) for x in co])
-                rotation.update()
-
-            angle = action.fcurves.new(data_path=(
-                'data.lens'), action_group=group.name)
-            angle.keyframe_points.add(anm.frame_count)
-            angle.keyframe_points.foreach_set(
-                "co", [x for co in zip(frames, foc_lengths) for x in co])
-            angle.update()
-
+        self.context.scene.render.fps = int(frame_rate)
         self.context.scene.frame_start = 0
         self.context.scene.frame_current = 0
         self.context.scene.frame_end = frame_count
 
-    def get_cam_rotations(self, anm: CMTAnimation):
-        rotations = []
-        for data in anm.anm_data:
-            pos = Vector((data.pos_x, data.pos_y, data.pos_z))
-            foc = Vector((data.foc_x, data.foc_y, data.foc_z))
+    def make_action(self, anm: CMTAnimation, action_name):
+        action = self.camera.animation_data.action = bpy.data.actions.new(name=action_name)
+        group = action.groups.new("camera")
 
-            # Yes, i'm leaving this c++ code here until the CMT importer is 100% functional
-            """
-            public static Quaternion LookAt(Vector3 sourcePoint, Vector3 destPoint)
-            {
-                Vector3 forwardVector = Vector3.Normalize(destPoint - sourcePoint);
+        convert_cmt_anm_to_blender(anm, self.camera.data)
+        dists, rotations = zip(*map(CMTFrame.to_dist_rotation, anm.frames))
 
-                float dot = Vector3.Dot(Vector3.forward, forwardVector);
+        def import_curve(data_path, values):
+            values = enumerate(zip(*values)) if hasattr(values[0], '__iter__') else [(-1, values)]
 
-                if (Math.Abs(dot - (-1.0f)) < 0.000001f)
-                {
-                    return new Quaternion(Vector3.up.x, Vector3.up.y, Vector3.up.z, 3.1415926535897932f);
-                }
-                if (Math.Abs(dot - (1.0f)) < 0.000001f)
-                {
-                    return Quaternion.identity;
-                }
+            for i, values_channel in values:
+                fcurve = action.fcurves.new(data_path=data_path, index=i, action_group=group.name)
+                fcurve.keyframe_points.add(len(values_channel))
+                fcurve.keyframe_points.foreach_set('co', [x for co in zip(
+                    range(len(values_channel)), values_channel) for x in co])
 
-                float rotAngle = (float)Math.Acos(dot);
-                Vector3 rotAxis = Vector3.Cross(Vector3.forward, forwardVector);
-                rotAxis = Vector3.Normalize(rotAxis);
-                return CreateFromAxisAngle(rotAxis, rotAngle);
-            }
+                fcurve.update()
 
-            // just in case you need that function also
-            public static Quaternion CreateFromAxisAngle(Vector3 axis, float angle)
-            {
-                float halfAngle = angle * .5f;
-                float s = (float)System.Math.Sin(halfAngle);
-                Quaternion q;
-                q.x = axis.x * s;
-                q.y = axis.y * s;
-                q.z = axis.z * s;
-                q.w = (float)System.Math.Cos(halfAngle);
-                return q;
-            }
-            """
+        import_curve('location', list(map(lambda x: x.location[:], anm.frames)))
+        import_curve('rotation_quaternion', list(map(lambda x: x[:], rotations)))
+        import_curve('data.lens', list(map(lambda x: x.fov, anm.frames)))
+        import_curve('data.dof.focus_distance', dists)
 
-            forward = (foc - pos).normalized()
-            """
-            axis = Vector((0, 0, -1)).cross(forward).normalized()
-            #if axis.magnitude == 0.0:
-            #    axis = Vector((0, 1, 0))
-            
-            dot = Vector((0, 0, -1)).dot(forward)
-            if abs(dot - (-1.0)) < 0.000001:
-                rotations.append((pi, axis.x, axis.y, axis.z))
-                continue
-            if abs(dot - (1.0)) < 0.000001:
-                rotations.append(Quaternion())
-                continue
-            angle = acos(dot)
-            print(f"angle: {angle}")
-            print(f"data.rot: {data.rot}")
-            rotations.append((angle, axis.x, axis.y, axis.z))
-            """
-            bpy.ops.transform.rotate()
-            rotation = forward.to_track_quat('-Z', 'Y')
-            rotation = rotation @ Euler((0, 0, data.rot)).to_quaternion()
-            # rotation.rotate()
-            rotations.append(rotation)
-
-            # v0 not working
-            """
-            pos = Vector((data.pos_x, data.pos_y, data.pos_z))
-            pos_f = Vector((data.foc_x, data.foc_y, data.foc_z))
-            axis = pos_f - pos
-            axis.normalize()
-            rotations.append((data.rot, axis.x, axis.y, axis.z))
-            """
-
-        return rotations
-
-    def convert_cam_to_blender(self, data_list: CMTData):
-        for data in data_list:
-            data.pos_x = -data.pos_x
-            pos_z = data.pos_y
-            pos_y = data.pos_z
-            data.pos_y = pos_y
-            data.pos_z = pos_z
-
-            data.foc_x = -data.foc_x
-            foc_z = data.foc_y
-            foc_y = data.foc_z
-            data.foc_y = foc_y
-            data.foc_z = foc_z
-
-        return data_list
+        if anm.has_clip_range():
+            # CMTs that were read from a file will either have a clip range for all frames, or no clip ranges at all
+            clip_starts, clip_ends = zip(*map(lambda x: x.clip_range, anm.frames))
+            import_curve('data.clip_start', clip_starts)
+            import_curve('data.clip_end', clip_ends)
 
 
 class GMTImporter:

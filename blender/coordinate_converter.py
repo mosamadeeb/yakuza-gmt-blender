@@ -1,8 +1,11 @@
+from math import tan
 from typing import Dict, List, Tuple
 
+from bpy.types import Camera
 from mathutils import Matrix, Quaternion, Vector
 
 from ..gmt_lib import *
+from ..gmt_lib.gmt.structure.cmt import CMTAnimation
 from .bone_props import GMTBlenderBoneProps
 
 
@@ -48,6 +51,13 @@ def convert_gmt_curve_to_blender(curve: GMTCurve):
     elif curve.type == GMTCurveType.ROTATION:
         for kf in curve.keyframes:
             kf.value = rot_to_blender(kf.value)
+
+
+def convert_cmt_anm_to_blender(anm: CMTAnimation, camera_data: Camera):
+    for frame in anm.frames:
+        frame.location = pos_to_blender(frame.location)
+        frame.focus_point = pos_to_blender(frame.focus_point)
+        frame.fov = (camera_data.sensor_height / 2) / tan(frame.fov / 2)    # sensor_height should be 100.0 here
 
 
 def transform_location_to_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Vector]):
