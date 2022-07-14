@@ -221,10 +221,13 @@ class CMTImporter:
         if not self.camera.animation_data:
             self.camera.animation_data_create()
 
+        # Set some properties that are needed for the imported action to look proper
+        # While it might be possible to animate these, it will only complicate things
         self.camera.rotation_mode = 'QUATERNION'
         self.camera.data.lens_unit = 'MILLIMETERS'
         self.camera.data.sensor_fit = 'VERTICAL'
         self.camera.data.sensor_height = 100.0
+        self.camera.data.dof.use_dof = True
 
         single = bool(self.cmt.animation)
         for i, anm in enumerate(self.cmt.animation_list):
@@ -258,7 +261,13 @@ class CMTImporter:
         import_curve('location', list(map(lambda x: x.location[:], anm.frames)))
         import_curve('rotation_quaternion', list(map(lambda x: x[:], rotations)))
         import_curve('data.lens', list(map(lambda x: x.fov, anm.frames)))
-        import_curve('data.dof.focus_distance', dists)
+
+        # Kenzan does not store the focus distance
+        if self.cmt.version > CMTVersion.KENZAN:
+            # TODO: This value for aperture_fstop is just an arbitrary value that gives a closer look to in-game DOF
+            # This same fstop value should be used during animation or the resulting DOF in the game might look different
+            import_curve('data.dof.focus_distance', dists)
+            import_curve('data.dof.aperture_fstop', (15.0,))
 
         if anm.has_clip_range():
             # CMTs that were read from a file will either have a clip range for all frames, or no clip ranges at all
