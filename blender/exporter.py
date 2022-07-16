@@ -142,7 +142,7 @@ class ExportGMT(Operator, ExportHelper):
         description='If enabled, will export keyframes animated in the camera object if they exist. '
                     'Otherwise, will export the keyframes from the action only.\n'
                     'If this option is enabled and both channels exist, an error will occur. '
-                    'To fix it, one of the channels should be deleted.',
+                    'To fix it, one of the channels should be deleted',
         default=True
     )
 
