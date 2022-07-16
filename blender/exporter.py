@@ -3,15 +3,17 @@ from typing import Dict, List
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
-from bpy.types import FCurve, Operator
+from bpy.types import Action, FCurve, Operator
 from bpy_extras.io_utils import ExportHelper
 from mathutils import Quaternion, Vector
 
 from ..gmt_lib import *
-from ..gmt_lib.gmt.gmt_writer import write_ifa_to_file
+from ..gmt_lib.gmt.gmt_writer import write_cmt_to_file, write_ifa_to_file
+from ..gmt_lib.gmt.structure.cmt import *
 from ..gmt_lib.gmt.structure.ifa import *
 from .bone_props import GMTBlenderBoneProps, get_edit_bones_props
-from .coordinate_converter import (pattern1_from_blender,
+from .coordinate_converter import (convert_cmt_anm_from_blender,
+                                   pattern1_from_blender,
                                    pattern2_from_blender,
                                    transform_location_from_blender,
                                    transform_rotation_from_blender)
@@ -43,8 +45,10 @@ class ExportGMT(Operator, ExportHelper):
     def action_callback(self, context: bpy.context):
         items = []
 
+        # TODO: Instead of setting the default action to the one used by the active object,
+        # maybe we should use the one used by the selected armature_name?
         action_name = ""
-        ao = context.active_object
+        ao = context.active_object if self.export_format != 'CMT' else context.scene.camera
         if ao and ao.animation_data:
             # Add the selected action first so that it's the default value
             selected_action = ao.animation_data.action
@@ -56,16 +60,23 @@ class ExportGMT(Operator, ExportHelper):
             items.append((a.name, a.name, ""))
         return items
 
-    def armature_callback(self, context):
+    def armature_callback(self, context: bpy.context):
         items = []
-        ao = context.active_object
-        ao_name = ao.name
 
-        if ao and ao.type == 'ARMATURE':
+        if self.export_format == 'CMT':
+            ao = context.scene.camera
+            obj_type = 'CAMERA'
+        else:
+            ao = context.active_object
+            obj_type = 'ARMATURE'
+
+        ao_name = ao.name if ao else ''
+
+        if ao and ao.type == obj_type:
             # Add the selected armature first so that it's the default value
             items.append((ao_name, ao_name, ""))
 
-        for a in [arm for arm in bpy.data.objects if arm.type == 'ARMATURE' and arm.name != ao_name]:
+        for a in [arm for arm in bpy.data.objects if arm.type == obj_type and arm.name != ao_name]:
             items.append((a.name, a.name, ""))
         return items
 
@@ -85,6 +96,7 @@ class ExportGMT(Operator, ExportHelper):
 
     export_format: EnumProperty(
         items=[('GMT', 'GMT (Model Animation)', ''),
+               ('CMT', 'CMT (Camera Animation)', ''),
                ('IFA', 'IFA (Pre-Ishin Face Animation)', ''),
                ],
         name="Export Format",
@@ -110,11 +122,29 @@ class ExportGMT(Operator, ExportHelper):
                ('YAKUZA3', 'Yakuza 3, 4, Dead Souls', ""),
                ('YAKUZA5', 'Yakuza 5', ""),
                ('ISHIN', 'Yakuza 0, Kiwami, Ishin, FOTNS', ""),
-               ('DE', 'Dragon Engine (Yakuza 6, Kiwami 2, Like a Dragon, ...)', "")
+               ('DE', 'Dragon Engine (Yakuza 6, Kiwami 2, ...)', ""),
                ],
         name="Game Preset",
         description="Target game which the exported GMT will be used in",
         default=3)
+
+    cmt_game: EnumProperty(
+        items=[('KENZAN', 'Ryu Ga Gotoku Kenzan', ""),
+               ('YAKUZA3', 'Yakuza 3, 4, Dead Souls', ""),
+               ('YAKUZA5', 'Yakuza 5 or newer (0, Kiwami, Dragon Engine, ...)', ""),
+               ],
+        name="Game Preset",
+        description="Target game which the exported CMT will be used in",
+        default=2)
+
+    use_camera_keyframes: BoolProperty(
+        name='Export Camera Data Keyframes',
+        description='If enabled, will export keyframes animated in the camera object if they exist. '
+                    'Otherwise, will export the keyframes from the action only.\n'
+                    'If this option is enabled and both channels exist, an error will occur. '
+                    'To fix it, one of the channels should be deleted.',
+        default=True
+    )
 
     gmt_file_name: StringProperty(
         name="GMT File Name",
@@ -174,6 +204,10 @@ class ExportGMT(Operator, ExportHelper):
             # Update file and anm name if both are empty
             if self.gmt_file_name == self.gmt_anm_name == "":
                 self.action_update(context)
+        elif self.export_format == 'CMT':
+            layout.prop(self, 'cmt_game')
+            layout.separator()
+            layout.prop(self, 'use_camera_keyframes')
 
         self.export_format_update(context)
 
@@ -181,11 +215,14 @@ class ExportGMT(Operator, ExportHelper):
         import time
 
         try:
-            arm = self.check_armature(context)
-            if isinstance(arm, str):
-                raise GMTError(arm)
+            if self.export_format == 'CMT':
+                exporter_cls = CMTExporter
+            else:
+                arm = self.check_armature(context)
+                if isinstance(arm, str):
+                    raise GMTError(arm)
 
-            exporter_cls = IFAExporter if self.export_format == 'IFA' else GMTExporter
+                exporter_cls = IFAExporter if self.export_format == 'IFA' else GMTExporter
 
             start_time = time.time()
             exporter = exporter_cls(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
@@ -490,6 +527,118 @@ class GMTExporter:
         return list(map(lambda x: 0 if x > 17 else x, pattern))
 
 
+class CMTExporter:
+    def __init__(self, context: bpy.context, filepath, export_settings: Dict):
+        self.filepath = filepath
+        self.context = context
+
+        self.action_name = export_settings.get('action_name')
+        self.cmt_game = export_settings.get('cmt_game')
+        self.use_camera_keyframes = export_settings.get('use_camera_keyframes')
+
+        self.camera = bpy.data.objects.get(export_settings.get('armature_name'))
+        if not self.camera:
+            raise GMTError('No camera to export animation from')
+
+    def export(self):
+        print(f"Exporting action: {self.action_name}")
+
+        self.cmt = CMT(CMTVersion[self.cmt_game])
+
+        # Only single animation export for now
+        self.cmt.animation = self.make_anm(self.action_name)
+        write_cmt_to_file(self.cmt, self.filepath)
+
+        print("CMT Export finished")
+
+    def make_anm(self, action_name):
+        action = bpy.data.actions.get(action_name)
+        cam_action: Action = (anm_data := self.camera.data.animation_data) and anm_data.action
+
+        if not action:
+            raise GMTError('Action not found')
+
+        anm = CMTAnimation()
+
+        # Combined max frame range
+        frame_count = 1 + int(max(action.frame_range[1], cam_action.frame_range[1] if cam_action else 0))
+
+        loc_curves = [action.fcurves.find('location', index=x) for x in range(3)]
+        rot_curves = [action.fcurves.find('rotation_quaternion', index=x) for x in range(4)]
+
+        loc_list = self.export_fcurves(loc_curves, 'location', frame_count)
+        rot_list = self.export_fcurves(rot_curves, 'rotation_quaternion', frame_count)
+
+        data_values = dict.fromkeys(['lens', 'dof.focus_distance', 'clip_start', 'clip_end'])
+
+        for datapath in data_values:
+            curve = action.fcurves.find(f'data.{datapath}')
+            cam_curve = cam_action and cam_action.fcurves.find(datapath)
+
+            if self.use_camera_keyframes and cam_curve:
+                if curve:
+                    raise GMTError(f'Multiple sources for camera datapath \"{datapath}\" exist. Delete one of the channels or disable \"Export Camera Data Keyframes\"')
+
+                curve = cam_curve
+
+            data_values[datapath] = self.export_fcurves([curve], f'data.{datapath}', frame_count)
+
+        fov_list = data_values['lens']
+        dist_list = data_values['dof.focus_distance']
+        clip_start_list = data_values['clip_start']
+        clip_end_list = data_values['clip_end']
+
+        if has_clip_range := (clip_start_list or clip_end_list):
+            if not clip_start_list:
+                clip_start_list = [0.1] * frame_count
+            if not clip_end_list:
+                clip_end_list = [10000.0] * frame_count
+
+        frames = anm.frames = [None] * frame_count
+        for i in range(frame_count):
+            frame = frames[i] = CMTFrame(loc_list[i], fov_list[i])
+            frame.from_dist_rotation(dist_list[i], rot_list[i], True)
+
+            if has_clip_range:
+                frame.clip_range = (clip_start_list[i], clip_end_list[i])
+
+        # Convert the CMT frames after exporting everything
+        convert_cmt_anm_from_blender(anm, self.camera.data)
+        return anm
+
+    def export_fcurves(self, fcurves: List[FCurve], datapath, frame_count):
+        fcurves = [x for x in fcurves if x]
+
+        channel_count = len(fcurves)
+        channel_indices = list(map(lambda c: c.array_index, fcurves))
+
+        channel_values = []
+        for i in range(channel_count):
+            channel_values.append(list(map(lambda k: fcurves[i].evaluate(k), range(frame_count))))
+
+        if datapath == 'location':
+            if channel_count != 3:
+                for i in [x for x in range(3) if x not in channel_indices]:
+                    channel_values.insert(i, [self.camera.location[i]] * frame_count)
+
+            return list(map(lambda x, y, z: Vector((x, y, z)), *channel_values))
+        elif datapath == 'rotation_quaternion':
+            if channel_count != 4:
+                for i in [x for x in range(3) if x not in channel_indices]:
+                    channel_values.insert(i, [self.camera.rotation_quaternion[i]] * frame_count)
+
+            return list(map(lambda w, x, y, z: Quaternion((w, x, y, z)), *channel_values))
+        else:
+            # Single channels only
+            if not channel_values:
+                if datapath in ('data.clip_start', 'data.clip_end'):
+                    return list()
+
+                return [self.camera.path_resolve(datapath)] * frame_count
+
+            return channel_values[0]
+
+
 class IFAExporter(GMTExporter):
     def __init__(self, context: bpy.context, filepath, export_settings: Dict):
         self.filepath = filepath
@@ -592,4 +741,4 @@ def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
 
 
 def menu_func_export(self, context):
-    self.layout.operator(ExportGMT.bl_idname, text='Yakuza Animation (.gmt)')
+    self.layout.operator(ExportGMT.bl_idname, text='Yakuza Animation (.gmt/.cmt/.ifa)')

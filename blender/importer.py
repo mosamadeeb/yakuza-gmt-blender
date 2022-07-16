@@ -242,10 +242,11 @@ class CMTImporter:
 
     def make_action(self, anm: CMTAnimation, action_name):
         action = self.camera.animation_data.action = bpy.data.actions.new(name=action_name)
-        group = action.groups.new("camera")
+        group = action.groups.new("Camera")
 
+        # Convert the CMT frames before importing anything
         convert_cmt_anm_to_blender(anm, self.camera.data)
-        dists, rotations = zip(*map(CMTFrame.to_dist_rotation, anm.frames))
+        dists, rotations = zip(*map(lambda x: x.to_dist_rotation(True), anm.frames))
 
         def import_curve(data_path, values):
             values = enumerate(zip(*values)) if hasattr(values[0], '__iter__') else [(-1, values)]

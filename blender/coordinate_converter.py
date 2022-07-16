@@ -1,4 +1,4 @@
-from math import tan
+from math import atan, tan
 from typing import Dict, List, Tuple
 
 from bpy.types import Camera
@@ -13,12 +13,24 @@ def pos_to_blender(pos):
     return Vector([-pos[0], pos[2], pos[1]])
 
 
+def pos_from_blender(pos: Vector) -> Tuple[float]:
+    return (-pos[0], pos[2], pos[1])
+
+
 def rot_to_blender(rot):
     return Quaternion([rot[3], -rot[0], rot[2], rot[1]])
 
 
+def rot_from_blender(rot: Quaternion) -> Tuple[float]:
+    return (-rot[1], rot[3], rot[2], rot[0])
+
+
 def pattern1_to_blender(pattern: List[List[int]]) -> List[int]:
     return list(map(lambda x: (x[0],), pattern))
+
+
+def pattern1_from_blender(pattern: List[int]) -> List[List[int]]:
+    return [pattern, pattern[1:] + [pattern[-1]]]
 
 
 def pattern2_to_blender(pattern: List[int]) -> List[int]:
@@ -26,20 +38,26 @@ def pattern2_to_blender(pattern: List[int]) -> List[int]:
     return pattern
 
 
-def pos_from_blender(pos: Vector) -> Tuple[float]:
-    return (-pos[0], pos[2], pos[1])
-
-
-def rot_from_blender(rot: Quaternion) -> Tuple[float]:
-    return (-rot[1], rot[3], rot[2], rot[0])
-
-
-def pattern1_from_blender(pattern: List[int]) -> List[List[int]]:
-    return [pattern, pattern[1:] + [pattern[-1]]]
-
-
 def pattern2_from_blender(pattern: List[int]) -> List[List[int]]:
     return pattern
+
+
+def fov_to_blender(fov, sensor_height):
+    # sensor_height should be 100.0 here
+    return (sensor_height / 2) / tan(fov / 2)
+
+
+def fov_from_blender(fov, sensor_height):
+    # sensor_height should be 100.0 here
+    return 2 * atan(sensor_height / (2 * fov))
+
+
+def focus_point_to_blender(focus_point, location):
+    return location + ((focus_point - location).to_track_quat('Z', 'Y') @ Vector((0.0, 0.0, -(focus_point - location).length)))
+
+
+def focus_point_from_blender(focus_point, location):
+    return location + ((focus_point - location).to_track_quat('-Z', 'Y') @ Vector((0.0, 0.0, (focus_point - location).length)))
 
 
 def convert_gmt_curve_to_blender(curve: GMTCurve):
@@ -56,8 +74,15 @@ def convert_gmt_curve_to_blender(curve: GMTCurve):
 def convert_cmt_anm_to_blender(anm: CMTAnimation, camera_data: Camera):
     for frame in anm.frames:
         frame.location = pos_to_blender(frame.location)
-        frame.focus_point = pos_to_blender(frame.focus_point)
-        frame.fov = (camera_data.sensor_height / 2) / tan(frame.fov / 2)    # sensor_height should be 100.0 here
+        frame.focus_point = focus_point_to_blender(pos_to_blender(frame.focus_point), frame.location)
+        frame.fov = fov_to_blender(frame.fov, camera_data.sensor_height)
+
+
+def convert_cmt_anm_from_blender(anm: CMTAnimation, camera_data: Camera):
+    for frame in anm.frames:
+        frame.location = Vector(pos_from_blender(frame.location))
+        frame.focus_point = focus_point_from_blender(Vector(pos_from_blender(frame.focus_point)), frame.location)
+        frame.fov = fov_from_blender(frame.fov, camera_data.sensor_height)
 
 
 def transform_location_to_blender(bone_props: Dict[str, GMTBlenderBoneProps], bone_name: str, values: List[Vector]):
