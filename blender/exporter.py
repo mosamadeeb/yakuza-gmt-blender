@@ -624,7 +624,7 @@ class CMTExporter:
             return list(map(lambda x, y, z: Vector((x, y, z)), *channel_values))
         elif datapath == 'rotation_quaternion':
             if channel_count != 4:
-                for i in [x for x in range(3) if x not in channel_indices]:
+                for i in [x for x in range(4) if x not in channel_indices]:
                     channel_values.insert(i, [self.camera.rotation_quaternion[i]] * frame_count)
 
             return list(map(lambda w, x, y, z: Quaternion((w, x, y, z)), *channel_values))
