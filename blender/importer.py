@@ -227,7 +227,6 @@ class CMTImporter:
         self.camera.data.lens_unit = 'MILLIMETERS'
         self.camera.data.sensor_fit = 'VERTICAL'
         self.camera.data.sensor_height = 100.0
-        self.camera.data.dof.use_dof = True
 
         single = bool(self.cmt.animation)
         for i, anm in enumerate(self.cmt.animation_list):
@@ -267,6 +266,7 @@ class CMTImporter:
         if self.cmt.version > CMTVersion.KENZAN:
             # TODO: This value for aperture_fstop is just an arbitrary value that gives a closer look to in-game DOF
             # This same fstop value should be used during animation or the resulting DOF in the game might look different
+            import_curve('data.dof.use_dof', (True,))
             import_curve('data.dof.focus_distance', dists)
             import_curve('data.dof.aperture_fstop', (15.0,))
 
