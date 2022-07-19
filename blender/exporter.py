@@ -700,8 +700,11 @@ def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
     Does not affect NO_VECTOR animations.
     """
 
-    if vector_version == GMTVectorVersion.NO_VECTOR or not (center_bone and vector_bone):
+    if vector_version == GMTVectorVersion.NO_VECTOR:
         return
+
+    if not (center_bone and vector_bone):
+        print('GMTWarning: Cannot split vector - \"center_c_n\" and/or \"vector_c_n\" bones are missing')
 
     # in GMT coordinate system:
     # OLD_VECTOR and is_auth -> vector should copy X and Z of center, and have a 0 Y channel
@@ -709,8 +712,8 @@ def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
     # DRAGON_VECTOR -> vector should be used instead of center, center should be empty
     # Rotation should be copied to vector in all cases, and should be removed from center in all cases except (OLD_VECTOR and is_auth)
 
-    vector_bone.location = deepcopy(center_bone.location)
-    vector_bone.rotation = deepcopy(center_bone.rotation)
+    vector_bone.location = deepcopy(center_bone.location) or GMTCurve.new_location_curve()
+    vector_bone.rotation = deepcopy(center_bone.rotation) or GMTCurve.new_location_curve()
 
     if vector_version == GMTVectorVersion.OLD_VECTOR:
         # Clear Y channel in vector location
@@ -723,12 +726,15 @@ def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
             vector_bone.location.keyframes.append(GMTKeyframe(0, (0.0,)))
 
         if not is_auth:
+            if not center_bone.location:
+                center_bone.location = GMTCurve.new_location_curve()
+
             # Clear X and Z channels in center location
             if center_bone.location.channel == GMTCurveChannel.ALL:
                 for kf in center_bone.location.keyframes:
                     kf.value = (0.0, kf.value[1], 0.0)
 
-            elif center_bone.location.channel == GMTCurveChannel.X or center_bone.location.channel == GMTCurveChannel.Z:
+            elif center_bone.location.channel != GMTCurveChannel.Y:
                 center_bone.location.keyframes.clear()
                 center_bone.location.keyframes.append(GMTKeyframe(0, (0.0,)))
 

@@ -355,8 +355,11 @@ def merge_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
     Does not affect NO_VECTOR animations.
     """
 
-    if vector_version == GMTVectorVersion.NO_VECTOR or not (center_bone and vector_bone):
+    if vector_version == GMTVectorVersion.NO_VECTOR:
         return
+
+    if not (center_bone and vector_bone):
+        print('GMTWarning: Cannot merge vector - \"center_c_n\" and/or \"vector_c_n\" bones are missing')
 
     if (vector_version == GMTVectorVersion.OLD_VECTOR and not is_auth) or vector_version == GMTVectorVersion.DRAGON_VECTOR:
         # Both curves' values should be applied, so add vector to center
