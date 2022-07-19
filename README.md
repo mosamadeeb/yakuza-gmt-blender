@@ -35,6 +35,15 @@ By using this tool, you agree to the following:
 - If I **do not** credit this tool, I cannot **release** **mods**/footage that I created using the tool.
 - **Only** in the case I do not publish/**post** any mods/**footage** I created using this tool, I do not have to credit the tool.
 
+**Further, I also understand that**
+- Content created using this tool can be easily identified by the author(s) of the tool, who can decide whether or not the content was created/generated/transformed using the tool.
+- These **Terms of Use** apply retrospectively to all versions of this tool, and may be modified without notice.
+
+**I absolutely cannot, without explicit permission from the original tool's author**
+- Use this tool or any content created using it in a **commercial project**.
+- Use this tool or any content created using it in a project, whether paid or free, that is being **monetized** in any form, using any monetization platform such as **PayPal** or **Patreon**.
+- Use this tool or any content created using it if it has been determined that I willingly used the **leaked**, unfinished, unstable build of this tool that was released without the author's permission in 2021.
+
 ### If you do not agree to any of these terms, then you are not allowed to use this tool.
 
 While these terms might sound weird, they are only here to guarantee that the work done behind this tool receives proper credit. If all it takes to make a mod is to learn how to use a tool, then the modder should receive credit for being able to read instructions, not for releasing content that could never be made without the use of those tools.
