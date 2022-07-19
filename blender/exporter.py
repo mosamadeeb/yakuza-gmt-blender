@@ -343,7 +343,7 @@ class GMTExporter:
         rot_axes = ('w',) + loc_axes
         for c in channels:
             # Data path without bone name
-            data_path = c.data_path[c.data_path.rindex('.') + 1:]
+            data_path = c.data_path[c.data_path.rindex('.') + 1:] if '.' in c.data_path else ''
 
             if data_path == 'location' and (0 <= c.array_index < 3):
                 loc_curves[loc_axes[c.array_index]] = c
