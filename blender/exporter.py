@@ -708,14 +708,17 @@ def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
 
     # in GMT coordinate system:
     # OLD_VECTOR and is_auth -> vector should copy X and Z of center, and have a 0 Y channel
-    # OLD_VECTOR and not is_auth -> vector should be used for X and Z of center, center should have Y only
-    # DRAGON_VECTOR -> vector should be used instead of center, center should be empty
+    # DRAGON_VECTOR and is_auth -> vector should be used instead of center, center should be empty
+    # not is_auth -> vector should be used for X and Z of center, center should have Y only
     # Rotation should be copied to vector in all cases, and should be removed from center in all cases except (OLD_VECTOR and is_auth)
 
     vector_bone.location = deepcopy(center_bone.location) or GMTCurve.new_location_curve()
     vector_bone.rotation = deepcopy(center_bone.rotation) or GMTCurve.new_location_curve()
 
-    if vector_version == GMTVectorVersion.OLD_VECTOR:
+    if vector_version == GMTVectorVersion.DRAGON_VECTOR and is_auth:
+        center_bone.location = GMTCurve.new_location_curve()
+        center_bone.rotation = GMTCurve.new_rotation_curve()
+    else:
         # Clear Y channel in vector location
         if vector_bone.location.channel == GMTCurveChannel.ALL:
             for kf in vector_bone.location.keyframes:
@@ -740,10 +743,6 @@ def split_vector(center_bone: GMTBone, vector_bone: GMTBone, vector_version: GMT
 
             # Clear center rotation
             center_bone.rotation = GMTCurve.new_rotation_curve()
-
-    elif vector_version == GMTVectorVersion.DRAGON_VECTOR:
-        center_bone.location = GMTCurve.new_location_curve()
-        center_bone.rotation = GMTCurve.new_rotation_curve()
 
 
 def menu_func_export(self, context):
