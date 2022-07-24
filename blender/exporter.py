@@ -169,8 +169,8 @@ class ExportGMT(Operator, ExportHelper):
         description='Specify the animation\'s origin.\n'
                     'If this is enabled, then the animation should be from hact.par or auth folder. '
                     'Otherwise, it will be treated as being from motion folder.\n'
-                    'Needed for proper vector splitting for Y0/K1.\n'
-                    'Does not affect Y3-Y5 or DE. Does not affect anything if Split Vector is disabled',
+                    'Needed for proper vector splitting for Y0/K1 and DE.\n'
+                    'Does not affect Y3-Y5. Does not affect anything if Split Vector is disabled',
         default=False
     )
 
